@@ -1,0 +1,14 @@
+# Secretos y entornos (se inyectan por volumen/env en runtime)
+.env
+.env.*
+
+# Dependencias (se instalan dentro de la imagen)
+node_modules/
+npm-debug.log
+
+# Metadatos y docs no necesarios en la imagen
+.git/
+.gitignore
+.dockerignore
+as-is.md
+*.md

@@ -1,0 +1,12 @@
+# Entornos y secretos
+.env
+.env.*
+!.env.example
+
+# Dependencias
+node_modules/
+
+# Logs y caché
+*.log
+/tmp/
+actual-cache/

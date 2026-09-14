@@ -1,0 +1,17 @@
+version: '3.8'
+
+services:
+  actual-notifier:
+    build: .
+    container_name: actual_notifier
+    restart: unless-stopped
+    volumes:
+      - ./src:/app/src:ro
+      - ./crontab.txt:/app/crontab.txt:ro
+      - ./.env:/app/.env:ro
+    networks:
+      - actual_net
+
+networks:
+  actual_net:
+    external: true
