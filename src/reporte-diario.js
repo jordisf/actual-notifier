@@ -39,6 +39,18 @@ async function ejecutarReporteDiario() {
   let syncOk = false;
   let syncMensaje = '';
 
+  // Throttle: solo sincronizar con el banco si la última vez fue hace más de una hora.
+  const SYNC_INTERVAL_MS = 60 * 60 * 1000;
+  const syncMarkerPath = `${dataDir}/last-bank-sync.txt`;
+  let ultimaSync = null;
+  try {
+    ultimaSync = parseInt(fs.readFileSync(syncMarkerPath, 'utf8').trim(), 10);
+    if (!Number.isFinite(ultimaSync)) ultimaSync = null;
+  } catch {
+    ultimaSync = null;
+  }
+  const msDesdeUltima = ultimaSync ? Date.now() - ultimaSync : null;
+
   // Interceptar temporalmente stdout para suprimir el dump de transacciones de Actual API
   const originalStdoutWrite = process.stdout.write;
   function silenciarSalida() {
@@ -48,19 +60,27 @@ async function ejecutarReporteDiario() {
     process.stdout.write = originalStdoutWrite;
   }
 
-  try {
-    silenciarSalida();
-    await api.runBankSync();
-    restaurarSalida();
-
+  if (msDesdeUltima !== null && msDesdeUltima < SYNC_INTERVAL_MS) {
+    const minutos = Math.round(msDesdeUltima / 60000);
     syncOk = true;
-    syncMensaje = `Sincronización bancaria completada con éxito a las ${horaInicio}.`;
-    console.log(`[${new Date().toLocaleTimeString()}] Sincronización bancaria finalizada correctamente.`);
-  } catch (syncError) {
-    restaurarSalida();
-    syncOk = false;
-    syncMensaje = `No se pudo sincronizar con ING (${syncError.message || 'Error de conexión / PSD2'}).`;
-    console.warn(`[${new Date().toLocaleTimeString()}] Advertencia: ${syncMensaje}`);
+    syncMensaje = `Sincronización bancaria omitida: ya se sincronizó hace ${minutos} min (umbral: 60 min).`;
+    console.log(`[${new Date().toLocaleTimeString()}] ${syncMensaje}`);
+  } else {
+    try {
+      silenciarSalida();
+      await api.runBankSync();
+      restaurarSalida();
+
+      syncOk = true;
+      syncMensaje = `Sincronización bancaria completada con éxito a las ${horaInicio}.`;
+      fs.writeFileSync(syncMarkerPath, String(Date.now()));
+      console.log(`[${new Date().toLocaleTimeString()}] Sincronización bancaria finalizada correctamente.`);
+    } catch (syncError) {
+      restaurarSalida();
+      syncOk = false;
+      syncMensaje = `No se pudo sincronizar con ING (${syncError.message || 'Error de conexión / PSD2'}).`;
+      console.warn(`[${new Date().toLocaleTimeString()}] Advertencia: ${syncMensaje}`);
+    }
   }
 
     // =========================================================================
