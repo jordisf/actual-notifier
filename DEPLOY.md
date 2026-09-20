@@ -18,7 +18,7 @@ Rebuild the image **only** when `Dockerfile` or `package.json` changes.
 
 ```bash
 # 1. Update code
-git checkout master
+git checkout main
 git pull --ff-only
 
 # 2. Recreate containers (picks up new src/ + .env; no state loss)
