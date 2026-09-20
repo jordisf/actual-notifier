@@ -40,3 +40,14 @@ Scope: design §12 (11 steps) + §12A, against the dev stack per D11, with live 
 ## Verdict
 
 **CRITICAL: 0 · WARNING: 2 (above) · SUGGESTION: 2 (above)** — implementation matches proposal + design across all 11 verification steps; change is ready to archive.
+
+---
+
+## Post-Archive Addendum (2026-09-20, after the dedicated dev-env e2e)
+
+This addendum supersedes the warning list above for the items covered. The original report stands as the snapshot taken at archive time.
+
+- **WARNING #1 (live second-person same-message) — RESOLVED to the extent physically possible.** A *sequential* second tap cannot occur in Telegram (buttons are disabled once `editMessageText` lands), so the true case is the SIMULTANEOUS race. It was exercised on **live batch-3 store data** (interaction 5, winner `jordisf`) via `replay-callback.js --item-ref=5 --ref=3` through the real `handleUpdate`: outcome `duplicate (already answered)`, winner row unchanged, synthetic answer row removed. Evidence: tasks.md "Duplicate-tap race" note, commit `dde66fd`. Only the cosmetic Telegram toast for a synthetic callback id is unrenderable (HTTP 400, expected) — the live code path is byte-for-byte the one exercised.
+- **New evidence: live e2e batch 3** on a DEDICATED dev bot + dev group (bot `8451618156…`, group `-1004113118521`): full loop green (delivery → 2 taps applied → API read-back → follow-up run 0 uncategorized → seed restored). Commit `ed6798f`.
+- **New runbook items** (recorded in tasks.md GOTCHA notes): (a) after rotating a bot token, reset `kv poll_offset` to `0` — the offset is a per-bot server counter and a stale-high value parks the poll at EOF; (b) Actual mutations only flush through the proper `actual.close()` — `process.exit()` discards pending write-backs silently.
+- Verdict after addendum: **CRITICAL 0 · WARNING 1 (step 10 credential rotation — production precondition, by design) · SUGGESTION 2.**
