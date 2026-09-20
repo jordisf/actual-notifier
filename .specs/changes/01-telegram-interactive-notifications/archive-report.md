@@ -19,7 +19,7 @@ Only `master-add-telegram` merges to `master` once the whole chain is validated.
 
 ## Verification
 
-Full §12 + §12A pass on the dev stack, including the **live e2e**: real BotFather bot in a real Telegram supergroup, live taps applied categories to the dev Actual instance and were verified by API read (Renta, then Transporte + Suscripciones), message edited with "Respondido por jsbdm" + disabled buttons, and a follow-up run dropped the uncategorized count 2 → 0. See `verify-report.md`.
+Full §12 + §12A pass on the dev stack, including the **live e2e**: real BotFather bot in a real Telegram supergroup, live taps applied categories to the dev Actual instance and were verified by API read (Renta, then Transporte + Suscripciones), message edited with "Respondido por <user>" + disabled buttons, and a follow-up run dropped the uncategorized count 2 → 0. See `verify-report.md`.
 
 ## Final-state corrections made after the original apply artifacts
 
