@@ -4,7 +4,7 @@
 > **Inputs**: proposal (§7 decisions D1–D11), design (all sections incl. §12/§12A).
 > **Stack**: Node 20, CommonJS, no build step, **zero new runtime deps** (P9: bare Bot API over global fetch; do NOT add grammy/telegraf).
 > **strict_tdd**: FALSE — no test runner. Checks = `node --check` syntax, `docker compose config`, dev-stack functional verification per design §12/§12A.
-> **Delivery**: `auto-chain`, PR budget 400 authored lines/slice. `chain_strategy`: **pending user choice** (slices S1..S4 below).
+> **Delivery**: `auto-chain`, PR budget 400 authored lines/slice. `chain_strategy`: `feature-branch-chain` (user-chosen 2026-09-20). Tracker branch: **`master-add-telegram`** (existing branch holding proposal + dev environment; current HEAD). Slice branches fork from the tracker: `slice/01-s1-...` → PR#1 targets `master-add-telegram`; each later slice branch forks from the previous slice branch and its PR targets the previous slice branch; only `master-add-telegram` eventually merges to `master` when the whole feature is validated.
 > **Commits**: Conventional Commits only; no AI/Co-Authored-By attribution.
 
 ## Carry-in bindings (from design gatekeeper — non-negotiable)
@@ -143,7 +143,7 @@ Linear safe order: **T0 → T1 → T2 → T3 → T4 → T5 → T6 → T7**.
   - **PR #3 (S3)**: `feat: deliver interactive Telegram notifications from cron` (bot + send + wiring + compose/infra; listener service ships dormant per T6 note).
   - **PR #4 (S4)**: `feat: run long-poll listener with categorize action executor` (+ verification/docs closeout).
 - **400-line budget risk**: **High (multi-PR change)** — total is 3× the single-PR budget, but after one honest slicing pass every slice fits under 400 with no artificial compression. No `size:exception` needed.
-- **chain_strategy**: **PENDING USER CHOICE** — `stacked-to-main` vs `feature-branch-chain`. Orchestrator must ask before PR creation.
+- **chain_strategy**: `feature-branch-chain` (user-chosen 2026-09-20). Tracker branch: **`master-add-telegram`** (existing branch holding proposal + dev environment; current HEAD). Slice branches fork from the tracker: `slice/01-s1-...` → PR#1 targets `master-add-telegram`; each later slice branch forks from the previous slice branch and its PR targets the previous slice branch; only `master-add-telegram` eventually merges to `master` when the whole feature is validated.
 
 ## Apply entry gate (restated)
 
