@@ -1,177 +1,75 @@
 // override: true para que un .env montado como volumen tenga prioridad y se recargue en cada ejecución sin reiniciar el contenedor.
 require('dotenv').config({ override: true });
-const fs = require('fs');
-const api = require('@actual-app/api');
 const nodemailer = require('nodemailer');
+const actual = require('./actual');
+const { compute } = require('./report');
+const store = require('./store');
+const bot = require('./telegram/bot');
+const send = require('./telegram/send');
+const { log } = require('./log');
 
-// 1. Categorías prioritarias de gasto corriente del hogar (Grupo 2)
-const CATEGORIAS_OBJETIVO = [
-  'Gasto Personal',
-  'Farmacia y Botiquin',
-  'Supermercado y Alimentación',
-  'Ocio y Restaurantes',
-  'Transporte'
-];
+/**
+ * T4: attach the Actual tx id + account id to each report tx row so the
+ * Telegram layer can persist interaction rows (write-back target). A missing
+ * row is tolerated (id stays null; that tx gets no interactive message but
+ * remains visible in summary + email).
+ */
+async function attachTxIds(handle, txRows, mesActual) {
+  if (!txRows || txRows.length === 0) return txRows || [];
+  const [y, m] = mesActual.split('-');
+  const lastDay = new Date(Number(y), Number(m), 0).getDate();
+  const primerDia = `${mesActual}-01`;
+  const ultimoDia = `${mesActual}-${String(lastDay).padStart(2, '0')}`;
+  const matchKey = (fecha, beneficiario, importe) =>
+    `${fecha}|${beneficiario}|${importe.toFixed(2)}`;
+
+  const byKey = new Map(txRows.map((t) => [matchKey(t.fecha, t.beneficiario, t.importe), t]));
+  const accounts = await handle.api.getAccounts();
+  for (const account of accounts.filter((a) => !a.offbudget && !a.closed)) {
+    try {
+      const txs = await handle.api.getTransactions(account.id, primerDia, ultimoDia);
+      for (const t of txs) {
+        if (t.is_parent) continue;
+        if (t.category != null && t.category !== '') continue; // keep only uncategorized
+        if (t.transfer_id != null && t.transfer_id !== '') continue;
+        const importe = (t.amount || 0) / 100;
+        const row = byKey.get(matchKey(t.date, t.imported_payee || t.payee_name || 'Desconocido', importe));
+        if (row) {
+          row.id = t.id;
+          row.account_id = account.id;
+        }
+      }
+    } catch (errTx) {
+      log('warn', 'cron', `No se pudieron leer transacciones de ${account.name}: ${errTx.message}`);
+    }
+  }
+  return [...byKey.values()];
+}
 
 async function ejecutarReporteDiario() {
   const horaInicio = new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
-  console.log(`[${horaInicio}] Conectando con Actual Budget en ${process.env.ACTUAL_SERVER_URL}...`);
+  log('info', 'cron', `Conectando con Actual Budget en ${process.env.ACTUAL_SERVER_URL}...`, { horaInicio });
 
-  // Asegurar la existencia del directorio de caché local
-  const dataDir = '/tmp/actual-cache';
-  if (!fs.existsSync(dataDir)) {
-    fs.mkdirSync(dataDir, { recursive: true });
-  }
-
-  await api.init({
-    dataDir: dataDir,
-    serverURL: process.env.ACTUAL_SERVER_URL,
-    password: process.env.ACTUAL_PASSWORD,
-  });
-
-  await api.downloadBudget(process.env.ACTUAL_SYNC_ID);
-  
+  // Cron siempre usa su propio dataDir efímero (marcador de throttle incluido).
+  const handle = await actual.open('/tmp/actual-cache');
+  // const api = handle.api;
 
   // =========================================================================
-  // PASO 1: SINCRONIZACIÓN BANCARIA AUTOMÁTICA (CON SALIDA SILENCIADA)
+  // PASOS 1-3: SINCRONIZACIÓN + CATEGORIZACIÓN + DISPONIBILIDAD
+  // (extracted to src/report.js — verbatim semantics)
   // =========================================================================
-  console.log(`[${new Date().toLocaleTimeString()}] Conectando con entidad bancaria (ING)...`);
-  let syncOk = false;
-  let syncMensaje = '';
+  const reporte = await compute(handle);
+  const {
+    syncOk, syncMensaje, mesActual, diasRestantes,
+    transaccionesSinCategorizar, datosConsumo, categoriasNegativas, hoy
+  } = reporte;
 
-  // Throttle: solo sincronizar con el banco si la última vez fue hace más de una hora.
-  const SYNC_INTERVAL_MS = 60 * 60 * 1000;
-  const syncMarkerPath = `${dataDir}/last-bank-sync.txt`;
-  let ultimaSync = null;
-  try {
-    ultimaSync = parseInt(fs.readFileSync(syncMarkerPath, 'utf8').trim(), 10);
-    if (!Number.isFinite(ultimaSync)) ultimaSync = null;
-  } catch {
-    ultimaSync = null;
-  }
-  const msDesdeUltima = ultimaSync ? Date.now() - ultimaSync : null;
+  // T4: the report layer (untouched) returns display fields only; the Actual
+  // tx id + account id are looked up from the warm cache (same read the
+  // report already did) and attached for the Telegram interaction rows.
+  const txList = await attachTxIds(handle, transaccionesSinCategorizar, mesActual);
 
-  // Interceptar temporalmente stdout para suprimir el dump de transacciones de Actual API
-  const originalStdoutWrite = process.stdout.write;
-  function silenciarSalida() {
-    process.stdout.write = () => true;
-  }
-  function restaurarSalida() {
-    process.stdout.write = originalStdoutWrite;
-  }
-
-  if (msDesdeUltima !== null && msDesdeUltima < SYNC_INTERVAL_MS) {
-    const minutos = Math.round(msDesdeUltima / 60000);
-    syncOk = true;
-    syncMensaje = `Sincronización bancaria omitida: ya se sincronizó hace ${minutos} min (umbral: 60 min).`;
-    console.log(`[${new Date().toLocaleTimeString()}] ${syncMensaje}`);
-  } else {
-    try {
-      silenciarSalida();
-      await api.runBankSync();
-      restaurarSalida();
-
-      syncOk = true;
-      syncMensaje = `Sincronización bancaria completada con éxito a las ${horaInicio}.`;
-      fs.writeFileSync(syncMarkerPath, String(Date.now()));
-      console.log(`[${new Date().toLocaleTimeString()}] Sincronización bancaria finalizada correctamente.`);
-    } catch (syncError) {
-      restaurarSalida();
-      syncOk = false;
-      syncMensaje = `No se pudo sincronizar con ING (${syncError.message || 'Error de conexión / PSD2'}).`;
-      console.warn(`[${new Date().toLocaleTimeString()}] Advertencia: ${syncMensaje}`);
-    }
-  }
-
-    // =========================================================================
-  // PASO 2: DETECCIÓN DE MOVIMIENTOS SIN CATEGORIZAR (MES EN CURSO)
   // =========================================================================
-  const hoy = new Date();
-  const mesActual = hoy.toISOString().slice(0, 7); // 'YYYY-MM'
-  const primerDiaMes = `${mesActual}-01`;
-  const ultimoDiaMesNum = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 0).getDate();
-  const ultimoDiaMesStr = `${mesActual}-${String(ultimoDiaMesNum).padStart(2, '0')}`;
-  const diasRestantes = Math.max(1, ultimoDiaMesNum - hoy.getDate() + 1);
-
-  // Consultar todas las cuentas operativas (On-Budget)
-  const accounts = await api.getAccounts();
-  const cuentasOnBudget = accounts.filter(a => !a.offbudget && !a.closed);
-
-  let transaccionesSinCategorizar = [];
-
-  for (const cuenta of cuentasOnBudget) {
-    try {
-      const txs = await api.getTransactions(cuenta.id, primerDiaMes, ultimoDiaMesStr);
-      // Filtrar movimientos sin categoría que no sean transferencias internas neutras
-      const sinCat = txs.filter(t =>
-        !t.is_parent && // Evitar duplicar con transacciones padre desglosadas
-        (t.category == null || t.category === '') &&
-        (t.transfer_id == null || t.transfer_id === '')
-      );
-
-      sinCat.forEach(t => {
-        transaccionesSinCategorizar.push({
-          cuenta: cuenta.name,
-          fecha: t.date,
-          beneficiario: t.imported_payee || t.payee_name || 'Desconocido',
-          importe: (t.amount || 0) / 100
-        });
-      });
-    } catch (errTx) {
-      console.warn(`No se pudieron leer transacciones de ${cuenta.name}: ${errTx.message}`);
-    }
-  }
-
-    // =========================================================================
-  // PASO 3: EXTRACCIÓN Y CÁLCULO DE DISPONIBILIDAD PRESUPUESTARIA
-  // =========================================================================
-  const categoriesList = await api.getCategories();
-  const budgetMonth = await api.getBudgetMonth(mesActual);
-
-  const balanceMap = new Map();
-  if (budgetMonth && budgetMonth.categoryGroups) {
-    for (const group of budgetMonth.categoryGroups) {
-      if (group.categories) {
-        for (const cat of group.categories) {
-          balanceMap.set(cat.id, (cat.balance || 0) / 100);
-        }
-      }
-    }
-  }
-
-  // Procesar las 5 categorías operativas del hogar
-  const datosConsumo = [];
-  const categoriasMonitoreadasIds = new Set();
-
-  for (const nombre of CATEGORIAS_OBJETIVO) {
-    const cat = categoriesList.find(c => c.name.trim().toLowerCase() === nombre.trim().toLowerCase());
-    if (cat) {
-      categoriasMonitoreadasIds.add(cat.id);
-      const balance = balanceMap.get(cat.id) || 0;
-      datosConsumo.push({
-        nombre: cat.name,
-        saldo: balance,
-        ritmoDiario: (balance > 0 ? balance / diasRestantes : 0).toFixed(2)
-      });
-    }
-  }
-
-  // Barrido integral de sobregastos en todo el presupuesto
-  const categoriasNegativas = [];
-  for (const cat of categoriesList) {
-    if (cat.is_income) continue;
-    const balance = balanceMap.get(cat.id) || 0;
-
-    if (balance < 0 && !categoriasMonitoreadasIds.has(cat.id)) {
-      categoriasNegativas.push({
-        nombre: cat.name,
-        saldo: balance
-      });
-    }
-  }
-
-
-    // =========================================================================
   // PASO 4: MAQUETACIÓN HTML DEL CORREO
   // =========================================================================
   const badgeColor = syncOk ? '#e8f5e9' : '#fff3e0';
@@ -304,7 +202,7 @@ async function ejecutarReporteDiario() {
     .map(email => email.trim())
     .filter(email => email.length > 0);
 
-  console.log(`[${new Date().toLocaleTimeString()}] Lista de destinatarios procesada:`, destinatarios);
+  log('info', 'cron', 'Lista de destinatarios procesada', { destinatarios });
 
   // 2. Enviar el correo pasando el array limpio
   const info = await transporter.sendMail({
@@ -314,12 +212,127 @@ async function ejecutarReporteDiario() {
     html: html
   });
 
-  console.log(`[${new Date().toLocaleTimeString()}] Reporte enviado a [${destinatarios.join(', ')}] (ID: ${info.messageId}).`);
+  log('info', 'cron', `Reporte enviado a [${destinatarios.join(', ')}] (ID: ${info.messageId}).`);
 
-  await api.shutdown();
+  // =========================================================================
+  // PASOS 6-9 (T4) — store row + Telegram delivery + expiry + retention.
+  // Email already went out (PASO 5): everything below can NEVER affect the
+  // email path or the exit contract (email failure ⇒ exit 1, above).
+  // =========================================================================
+  const db = store.open();
+
+  try {
+    const reportId = store.insertReport(db, {
+      run_at: new Date().toISOString(),
+      sync_ok: syncOk,
+      sync_message: syncMensaje,
+      tx_uncategorized_count: transaccionesSinCategorizar.length,
+      email_sent: 1,
+    });
+
+    // -------------------------------------------------------------------------
+    // PASO 7: ENTREGA TELEGRAM — ONE try/catch; any error ⇒ log, counts 0,
+    // run still succeeds (channels are independent, design §7/§10).
+    // -------------------------------------------------------------------------
+    const tgToken = (process.env.TELEGRAM_BOT_TOKEN || '').trim();
+    const tgGroup = (process.env.TELEGRAM_GROUP_ID || '').trim();
+
+    if (!tgToken || !tgGroup) {
+      log('warn', 'cron', 'Telegram not configured; email-only mode', {
+        hasToken: Boolean(tgToken),
+        hasGroup: Boolean(tgGroup),
+      });
+    } else {
+      try {
+        const allCategories = await actual.getCategories(handle.api);
+        const { categories, missing } = resolveAllowlistedCategories(allCategories);
+        if (missing.length > 0) {
+          log('warn', 'cron', 'TELEGRAM_CATEGORIES: nombres no encontrados en el budget; omitidos', { missing });
+        }
+        const result = await send.sendReport({
+          db,
+          chatId: tgGroup,
+          reportId,
+          txList,
+          categories,
+          mesActual,
+          syncMensaje,
+          datosConsumo,
+          categoriasNegativas,
+        });
+        store.setReportTelegram(db, reportId, {
+          telegram_summary_sent: 1,
+          telegram_tx_sent: result.sent,
+        });
+        log('info', 'cron', 'Entrega Telegram completada', {
+          reportId,
+          sent: result.sent,
+          failed: result.failed,
+        });
+      } catch (errTg) {
+        store.setReportTelegram(db, reportId, { telegram_summary_sent: 0, telegram_tx_sent: 0 });
+        log('error', 'cron', 'Entrega Telegram fallida; el correo ya fue enviado y el run sigue en verde', {
+          error: errTg.message,
+        });
+      }
+    }
+
+    // -------------------------------------------------------------------------
+    // PASO 8: EXPIRY (D6) — store flips prior pending rows, then a
+    // best-effort Telegram footer edit per just-expired message.
+    // -------------------------------------------------------------------------
+    const justExpired = store.expirePreviousPending(db, reportId);
+    if (justExpired.length > 0) {
+      log('info', 'cron', 'Interacciones previas expiradas', { count: justExpired.length, reportId });
+    }
+    for (const row of justExpired) {
+      try {
+        const text = send.buildExpiryText(row) + '\n⌛ Vencido por reporte nuevo';
+        await bot.editMessageText(row.tg_chat_id, row.tg_message_id, text);
+      } catch (errEdit) {
+        log('warn', 'cron', `No se pudo editar el mensaje expirado (item_ref ${row.item_ref})`, {
+          error: errEdit.message,
+        });
+      }
+    }
+
+    // -------------------------------------------------------------------------
+    // PASO 9: RETENTION — 90-day answers sweep, one pass.
+    // -------------------------------------------------------------------------
+    const purged = store.answersRetentionSweep(db);
+    if (purged > 0) {
+      log('info', 'cron', 'Barrido de retención completado', { purged });
+    }
+  } finally {
+    store.close(db);
+  }
+
+  await actual.close(handle);
 }
 
 ejecutarReporteDiario().catch(err => {
   console.error('Error al ejecutar el reporte:', err);
   process.exit(1);
 });
+
+/**
+ * Closed category list (config): TELEGRAM_CATEGORIES is a comma-separated
+ * allow-list of category NAMES (portable across budgets; names are resolved
+ * to ids per delivery). Empty/unset → offer every non-income category
+ * (legacy behavior). Names that do not exist in this budget are dropped
+ * with a warning, never a failure.
+ */
+function resolveAllowlistedCategories(allCategories) {
+  const raw = (process.env.TELEGRAM_CATEGORIES || '').trim();
+  if (raw === '') return { categories: allCategories, missing: [] };
+  const names = raw.split(',').map((s) => s.trim()).filter(Boolean);
+  const byName = new Map(allCategories.map((c) => [String(c.name).trim().toLowerCase(), c]));
+  const categories = [];
+  const missing = [];
+  for (const name of names) {
+    const hit = byName.get(name.toLowerCase());
+    if (hit) categories.push(hit);
+    else missing.push(name);
+  }
+  return { categories, missing };
+}

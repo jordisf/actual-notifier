@@ -2,6 +2,7 @@
 .env
 .env.*
 !.env.example
+!.env.dev
 
 # Dependencias
 node_modules/
@@ -10,3 +11,15 @@ node_modules/
 *.log
 /tmp/
 actual-cache/
+
+# Engram local memory
+.engram/
+# Local AI runtime state
+.atl/
+
+# Datos de desarrollo (seed de Actual Budget y snapshots)
+actual-budget/.actual-data/
+actual-budget/actualbudget/
+actual-budget/seed-data/dev-cache/
+# State de SQLite (notifier.db + WAL/SHM); el directorio lo crea runtime
+data/

@@ -1,0 +1,78 @@
+# Dev overlay: Mailpit (SMTP sink) + the notifier container wired to the
+# dev Actual Budget instance.
+#
+#   docker compose -f actual-budget/docker-compose.yml -f dev.yml up -d
+#   docker compose -f actual-budget/docker-compose.yml run --rm seed
+#   # edit .env with the ACTUAL_SYNC_ID printed by the seed, then:
+#   cp .env.dev .env
+#   docker compose -f actual-budget/docker-compose.yml -f dev.yml up -d actual-notifier
+#
+# Emails land in the Mailpit UI:  http://localhost:8025
+
+name: actual-budget-dev
+
+services:
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: mailpit
+    environment:
+      - MP_SMTP_AUTH_ACCEPT_ANY=1
+      - MP_SMTP_AUTH_ALLOW_INSECURE=1
+      - MP_DATABASE=/data/mailpit.db
+    volumes:
+      - mailpit-data:/data
+    ports:
+      - '1025:1025'
+      - '8025:8025'
+
+  actual-notifier:
+    build: ../
+    container_name: actual_notifier_dev
+    restart: no
+    environment:
+      ACTUAL_SERVER_URL: http://actual-budget:5006
+      ACTUAL_PASSWORD: dev-seed-password
+      DATA_DIR: /app/data
+    volumes:
+      - ../src:/app/src:ro
+      - ../crontab.txt:/app/crontab.txt:ro
+      - ../.env:/app/.env:ro
+      - ../data:/app/data   # shared writable SQLite volume (same as production split)
+    depends_on:
+      actual-server:
+        condition: service_healthy
+
+  # Dev mirror of production notifier-listener (design §12A compose note):
+  # same image, same self-detecting dormant command, same writable data volume,
+  # same :ro .env mount, no inbound ports. Runs the identical code paths as
+  # production; `restart: no` so a pre-S4 dead boot does not loop in dev.
+  notifier-listener-dev:
+    build: ../
+    container_name: notifier_listener_dev
+    restart: no
+    environment:
+      ACTUAL_SERVER_URL: http://actual-budget:5006
+      ACTUAL_PASSWORD: dev-seed-password
+      DATA_DIR: /app/data
+    volumes:
+      - ../src:/app/src:ro
+      - ../.env:/app/.env:ro
+      - ../data:/app/data
+    command: |
+      sh -c '
+      if [ ! -f /app/src/listener.js ]; then
+        echo "listener: src/listener.js not present yet (S4); staying dormant"
+        exec sleep infinity
+      fi
+      exec node /app/src/listener.js'
+    depends_on:
+      actual-server:
+        condition: service_healthy
+
+volumes:
+  mailpit-data:
+
+networks:
+  default:
+    name: actual_net
+    external: true
