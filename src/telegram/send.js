@@ -205,6 +205,15 @@ async function sendReport({ db, chatId, reportId, txList, categories, mesActual,
   let sent = 0;
   let failed = 0;
 
+  // 1b. No categories resolved (TELEGRAM_CATEGORIES allow-list matched
+  //     nothing in this budget): deliver the summary only — an interactive
+  //     message with no category buttons has no purpose. Summary above
+  //     still went out, and the email always has the full tx list.
+  if (!categories || categories.length === 0) {
+    log('warn', 'cron', 'Sin categorías para ofrecer; solo se envió el resumen (teclado vacío)');
+    return { reportId, sent: 0, failed: 0 };
+  }
+
   // 2. One interactive message per tx (oldest first, capped).
   for (let i = 0; i < capped.length; i += 1) {
     const tx = capped[i];

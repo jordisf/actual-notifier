@@ -244,7 +244,11 @@ async function ejecutarReporteDiario() {
       });
     } else {
       try {
-        const categories = await actual.getCategories(handle.api);
+        const allCategories = await actual.getCategories(handle.api);
+        const { categories, missing } = resolveAllowlistedCategories(allCategories);
+        if (missing.length > 0) {
+          log('warn', 'cron', 'TELEGRAM_CATEGORIES: nombres no encontrados en el budget; omitidos', { missing });
+        }
         const result = await send.sendReport({
           db,
           chatId: tgGroup,
@@ -310,3 +314,25 @@ ejecutarReporteDiario().catch(err => {
   console.error('Error al ejecutar el reporte:', err);
   process.exit(1);
 });
+
+/**
+ * Closed category list (config): TELEGRAM_CATEGORIES is a comma-separated
+ * allow-list of category NAMES (portable across budgets; names are resolved
+ * to ids per delivery). Empty/unset → offer every non-income category
+ * (legacy behavior). Names that do not exist in this budget are dropped
+ * with a warning, never a failure.
+ */
+function resolveAllowlistedCategories(allCategories) {
+  const raw = (process.env.TELEGRAM_CATEGORIES || '').trim();
+  if (raw === '') return { categories: allCategories, missing: [] };
+  const names = raw.split(',').map((s) => s.trim()).filter(Boolean);
+  const byName = new Map(allCategories.map((c) => [String(c.name).trim().toLowerCase(), c]));
+  const categories = [];
+  const missing = [];
+  for (const name of names) {
+    const hit = byName.get(name.toLowerCase());
+    if (hit) categories.push(hit);
+    else missing.push(name);
+  }
+  return { categories, missing };
+}
