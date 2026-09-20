@@ -126,6 +126,12 @@ T0: gates T1's applyCategoryChange and HARD-gates T5
 
 Linear safe order: **T0 → T1 → T2 → T3 → T4 → T5 → T6 → T7**.
 
+## Apply Progress
+
+- **S1 — DONE** (2026-09-20, branch `slice/01-s1-telegram-foundation`): `c08907b` (T1 log.js + actual.js), `e4e7ecf` (T2 store.js), `4a76e2c` (chain strategy doc). T0 gate confirmed on `@actual-app/api@26.9.0`: `api.updateTransaction(id, { category: categoryId })`. Smokes PASS (2 uncategorized, 8 non-income categories, double-claim first-wins). Gatekeeper PASS.
+- **S2 — DONE** (2026-09-20, branch `slice/01-s2-report-extraction`): `584cab4` `refactor: extract report computation from daily notifier monolith` (+229/-165 vs S1 branch). T3 checks: `node --check` both files PASS; **§12 step 9 early regression gate PASS** — Mailpit email from old monolith vs refactored code byte-identical (5503 chars, UTF-8 compare), subject tag `2 sin categorizar` preserved, logs show exactly 2 uncategorized (Nómina empresa +195.00, Compra suelta −15.00).
+- **S3 — NEXT**: T4 (telegram/bot.js + send.js + cron wiring + .env.example) + T6 (compose two services, data volume, dev overlay). Branch `slice/01-s3-telegram-delivery` to fork from `slice/01-s2-report-extraction`.
+
 ## Review Workload Forecast
 
 | Slice | Tasks | Est. authored lines (add+del) | Under 400? |
