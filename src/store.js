@@ -94,6 +94,19 @@ function insertReport(db, { run_at, sync_ok, sync_message, tx_uncategorized_coun
   return r.lastInsertRowid;
 }
 
+/**
+ * T4: fill in the telegram counters once delivery is known (success or
+ * failure-containment: telegram_* = 0). Reports row was inserted before
+ * the Telegram block runs (email-first, design §7 step 6).
+ */
+function setReportTelegram(db, reportId, { telegram_summary_sent = 0, telegram_tx_sent = 0 }) {
+  return db
+    .prepare(
+      `UPDATE reports SET telegram_summary_sent = ?, telegram_tx_sent = ? WHERE id = ?`,
+    )
+    .run(telegram_summary_sent ? 1 : 0, telegram_tx_sent ? 1 : 0, reportId);
+}
+
 // --- interactions ----------------------------------------------------------
 
 function base36(n) {
@@ -222,12 +235,34 @@ function answersRetentionSweep(db) {
   return r.changes;
 }
 
+/**
+ * T4: pin the real tg_message_id + button rows after a successful send.
+ * insertInteraction stores placeholders first (message_id -1, rows '[]')
+ * so item_ref exists for callback_data at keyboard-build time.
+ */
+function setInteractionDelivery(db, id, { tg_message_id, button_rows_json }) {
+  return db
+    .prepare(`UPDATE interactions SET tg_message_id = ?, button_rows_json = ? WHERE id = ?`)
+    .run(tg_message_id, button_rows_json, id);
+}
+
+/**
+ * T4: remove an interaction whose Telegram send failed, so the store stays
+ * truthful (the tx remains visible in summary + email only).
+ */
+function deleteInteraction(db, id) {
+  return db.prepare(`DELETE FROM interactions WHERE id = ?`).run(id);
+}
+
 module.exports = {
   DATA_DIR_DEFAULT,
   open,
   close: (db) => db.close(),
   insertReport,
+  setReportTelegram,
   insertInteraction,
+  setInteractionDelivery,
+  deleteInteraction,
   getInteraction,
   findInteractionByItemRef,
   claimAnswer,
