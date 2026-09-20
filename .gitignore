@@ -21,3 +21,5 @@ actual-cache/
 actual-budget/.actual-data/
 actual-budget/actualbudget/
 actual-budget/seed-data/dev-cache/
+# State de SQLite (notifier.db + WAL/SHM); el directorio lo crea runtime
+data/

@@ -95,16 +95,16 @@ function insertReport(db, { run_at, sync_ok, sync_message, tx_uncategorized_coun
 }
 
 /**
- * T4: fill in the telegram counters once delivery is known (success or
- * failure-containment: telegram_* = 0). Reports row was inserted before
- * the Telegram block runs (email-first, design §7 step 6).
+ * T4: fill in the telegram counters once delivery is known (success, or
+ * failure-containment which zeroes both). telegram_tx_sent stores the
+ * actual number of tx messages delivered (matches the `sent` log field).
  */
 function setReportTelegram(db, reportId, { telegram_summary_sent = 0, telegram_tx_sent = 0 }) {
   return db
     .prepare(
       `UPDATE reports SET telegram_summary_sent = ?, telegram_tx_sent = ? WHERE id = ?`,
     )
-    .run(telegram_summary_sent ? 1 : 0, telegram_tx_sent ? 1 : 0, reportId);
+    .run(telegram_summary_sent ? 1 : 0, telegram_tx_sent, reportId);
 }
 
 // --- interactions ----------------------------------------------------------
