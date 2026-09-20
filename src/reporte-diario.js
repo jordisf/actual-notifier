@@ -1,177 +1,29 @@
 // override: true para que un .env montado como volumen tenga prioridad y se recargue en cada ejecución sin reiniciar el contenedor.
 require('dotenv').config({ override: true });
-const fs = require('fs');
-const api = require('@actual-app/api');
 const nodemailer = require('nodemailer');
-
-// 1. Categorías prioritarias de gasto corriente del hogar (Grupo 2)
-const CATEGORIAS_OBJETIVO = [
-  'Gasto Personal',
-  'Farmacia y Botiquin',
-  'Supermercado y Alimentación',
-  'Ocio y Restaurantes',
-  'Transporte'
-];
+const actual = require('./actual');
+const { compute } = require('./report');
+const { log } = require('./log');
 
 async function ejecutarReporteDiario() {
   const horaInicio = new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
-  console.log(`[${horaInicio}] Conectando con Actual Budget en ${process.env.ACTUAL_SERVER_URL}...`);
+  log('info', 'cron', `Conectando con Actual Budget en ${process.env.ACTUAL_SERVER_URL}...`, { horaInicio });
 
-  // Asegurar la existencia del directorio de caché local
-  const dataDir = '/tmp/actual-cache';
-  if (!fs.existsSync(dataDir)) {
-    fs.mkdirSync(dataDir, { recursive: true });
-  }
-
-  await api.init({
-    dataDir: dataDir,
-    serverURL: process.env.ACTUAL_SERVER_URL,
-    password: process.env.ACTUAL_PASSWORD,
-  });
-
-  await api.downloadBudget(process.env.ACTUAL_SYNC_ID);
-  
+  // Cron siempre usa su propio dataDir efímero (marcador de throttle incluido).
+  const handle = await actual.open('/tmp/actual-cache');
+  // const api = handle.api;
 
   // =========================================================================
-  // PASO 1: SINCRONIZACIÓN BANCARIA AUTOMÁTICA (CON SALIDA SILENCIADA)
+  // PASOS 1-3: SINCRONIZACIÓN + CATEGORIZACIÓN + DISPONIBILIDAD
+  // (extracted to src/report.js — verbatim semantics)
   // =========================================================================
-  console.log(`[${new Date().toLocaleTimeString()}] Conectando con entidad bancaria (ING)...`);
-  let syncOk = false;
-  let syncMensaje = '';
+  const reporte = await compute(handle);
+  const {
+    syncOk, syncMensaje, mesActual, diasRestantes,
+    transaccionesSinCategorizar, datosConsumo, categoriasNegativas, hoy
+  } = reporte;
 
-  // Throttle: solo sincronizar con el banco si la última vez fue hace más de una hora.
-  const SYNC_INTERVAL_MS = 60 * 60 * 1000;
-  const syncMarkerPath = `${dataDir}/last-bank-sync.txt`;
-  let ultimaSync = null;
-  try {
-    ultimaSync = parseInt(fs.readFileSync(syncMarkerPath, 'utf8').trim(), 10);
-    if (!Number.isFinite(ultimaSync)) ultimaSync = null;
-  } catch {
-    ultimaSync = null;
-  }
-  const msDesdeUltima = ultimaSync ? Date.now() - ultimaSync : null;
-
-  // Interceptar temporalmente stdout para suprimir el dump de transacciones de Actual API
-  const originalStdoutWrite = process.stdout.write;
-  function silenciarSalida() {
-    process.stdout.write = () => true;
-  }
-  function restaurarSalida() {
-    process.stdout.write = originalStdoutWrite;
-  }
-
-  if (msDesdeUltima !== null && msDesdeUltima < SYNC_INTERVAL_MS) {
-    const minutos = Math.round(msDesdeUltima / 60000);
-    syncOk = true;
-    syncMensaje = `Sincronización bancaria omitida: ya se sincronizó hace ${minutos} min (umbral: 60 min).`;
-    console.log(`[${new Date().toLocaleTimeString()}] ${syncMensaje}`);
-  } else {
-    try {
-      silenciarSalida();
-      await api.runBankSync();
-      restaurarSalida();
-
-      syncOk = true;
-      syncMensaje = `Sincronización bancaria completada con éxito a las ${horaInicio}.`;
-      fs.writeFileSync(syncMarkerPath, String(Date.now()));
-      console.log(`[${new Date().toLocaleTimeString()}] Sincronización bancaria finalizada correctamente.`);
-    } catch (syncError) {
-      restaurarSalida();
-      syncOk = false;
-      syncMensaje = `No se pudo sincronizar con ING (${syncError.message || 'Error de conexión / PSD2'}).`;
-      console.warn(`[${new Date().toLocaleTimeString()}] Advertencia: ${syncMensaje}`);
-    }
-  }
-
-    // =========================================================================
-  // PASO 2: DETECCIÓN DE MOVIMIENTOS SIN CATEGORIZAR (MES EN CURSO)
   // =========================================================================
-  const hoy = new Date();
-  const mesActual = hoy.toISOString().slice(0, 7); // 'YYYY-MM'
-  const primerDiaMes = `${mesActual}-01`;
-  const ultimoDiaMesNum = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 0).getDate();
-  const ultimoDiaMesStr = `${mesActual}-${String(ultimoDiaMesNum).padStart(2, '0')}`;
-  const diasRestantes = Math.max(1, ultimoDiaMesNum - hoy.getDate() + 1);
-
-  // Consultar todas las cuentas operativas (On-Budget)
-  const accounts = await api.getAccounts();
-  const cuentasOnBudget = accounts.filter(a => !a.offbudget && !a.closed);
-
-  let transaccionesSinCategorizar = [];
-
-  for (const cuenta of cuentasOnBudget) {
-    try {
-      const txs = await api.getTransactions(cuenta.id, primerDiaMes, ultimoDiaMesStr);
-      // Filtrar movimientos sin categoría que no sean transferencias internas neutras
-      const sinCat = txs.filter(t =>
-        !t.is_parent && // Evitar duplicar con transacciones padre desglosadas
-        (t.category == null || t.category === '') &&
-        (t.transfer_id == null || t.transfer_id === '')
-      );
-
-      sinCat.forEach(t => {
-        transaccionesSinCategorizar.push({
-          cuenta: cuenta.name,
-          fecha: t.date,
-          beneficiario: t.imported_payee || t.payee_name || 'Desconocido',
-          importe: (t.amount || 0) / 100
-        });
-      });
-    } catch (errTx) {
-      console.warn(`No se pudieron leer transacciones de ${cuenta.name}: ${errTx.message}`);
-    }
-  }
-
-    // =========================================================================
-  // PASO 3: EXTRACCIÓN Y CÁLCULO DE DISPONIBILIDAD PRESUPUESTARIA
-  // =========================================================================
-  const categoriesList = await api.getCategories();
-  const budgetMonth = await api.getBudgetMonth(mesActual);
-
-  const balanceMap = new Map();
-  if (budgetMonth && budgetMonth.categoryGroups) {
-    for (const group of budgetMonth.categoryGroups) {
-      if (group.categories) {
-        for (const cat of group.categories) {
-          balanceMap.set(cat.id, (cat.balance || 0) / 100);
-        }
-      }
-    }
-  }
-
-  // Procesar las 5 categorías operativas del hogar
-  const datosConsumo = [];
-  const categoriasMonitoreadasIds = new Set();
-
-  for (const nombre of CATEGORIAS_OBJETIVO) {
-    const cat = categoriesList.find(c => c.name.trim().toLowerCase() === nombre.trim().toLowerCase());
-    if (cat) {
-      categoriasMonitoreadasIds.add(cat.id);
-      const balance = balanceMap.get(cat.id) || 0;
-      datosConsumo.push({
-        nombre: cat.name,
-        saldo: balance,
-        ritmoDiario: (balance > 0 ? balance / diasRestantes : 0).toFixed(2)
-      });
-    }
-  }
-
-  // Barrido integral de sobregastos en todo el presupuesto
-  const categoriasNegativas = [];
-  for (const cat of categoriesList) {
-    if (cat.is_income) continue;
-    const balance = balanceMap.get(cat.id) || 0;
-
-    if (balance < 0 && !categoriasMonitoreadasIds.has(cat.id)) {
-      categoriasNegativas.push({
-        nombre: cat.name,
-        saldo: balance
-      });
-    }
-  }
-
-
-    // =========================================================================
   // PASO 4: MAQUETACIÓN HTML DEL CORREO
   // =========================================================================
   const badgeColor = syncOk ? '#e8f5e9' : '#fff3e0';
@@ -304,7 +156,7 @@ async function ejecutarReporteDiario() {
     .map(email => email.trim())
     .filter(email => email.length > 0);
 
-  console.log(`[${new Date().toLocaleTimeString()}] Lista de destinatarios procesada:`, destinatarios);
+  log('info', 'cron', 'Lista de destinatarios procesada', { destinatarios });
 
   // 2. Enviar el correo pasando el array limpio
   const info = await transporter.sendMail({
@@ -314,9 +166,15 @@ async function ejecutarReporteDiario() {
     html: html
   });
 
-  console.log(`[${new Date().toLocaleTimeString()}] Reporte enviado a [${destinatarios.join(', ')}] (ID: ${info.messageId}).`);
+  log('info', 'cron', `Reporte enviado a [${destinatarios.join(', ')}] (ID: ${info.messageId}).`);
 
-  await api.shutdown();
+  // =========================================================================
+  // PASOS 6-9 (T4): row de reporte + entrega Telegram + expiración + barrido
+  // de retención — se insertarán aquí, DESPUÉS del envío de correo, sin
+  // tocar el contrato de salida 0/1 de este bloque SMTP.
+  // =========================================================================
+
+  await actual.close(handle);
 }
 
 ejecutarReporteDiario().catch(err => {
