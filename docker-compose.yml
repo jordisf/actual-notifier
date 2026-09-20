@@ -1,16 +1,49 @@
 version: '3.8'
 
+# Two services, one image (design §1):
+#  - notifier-cron:     existing cron behavior (entrypoint.sh → cron -f), unchanged schedule.
+#  - notifier-listener: long-poll Telegram listener (S4 ships src/listener.js;
+#                       until then the service is dormant via the guard in its command).
+# Both share the same writable data volume (SQLite) and the same :ro src/.env
+# mounts. No inbound ports on either service.
+
+x-notifier-base: &notifier-base
+  build: .
+  restart: unless-stopped
+  environment:
+    TZ: Europe/Madrid
+  volumes:
+    - ./src:/app/src:ro
+    - ./.env:/app/.env:ro
+    - ./data:/app/data
+  networks:
+    - actual_net
+
 services:
-  actual-notifier:
-    build: .
+  notifier-cron:
+    <<: *notifier-base
     container_name: actual_notifier
-    restart: unless-stopped
     volumes:
       - ./src:/app/src:ro
       - ./crontab.txt:/app/crontab.txt:ro
       - ./.env:/app/.env:ro
-    networks:
-      - actual_net
+      - ./data:/app/data
+
+  notifier-listener:
+    <<: *notifier-base
+    container_name: notifier_listener
+    # Self-detecting command: while src/listener.js does not exist (before S4)
+    # the guard logs once and sleeps, keeping the service up quietly — a clean
+    # `exit 0` would loop under restart: unless-stopped. Once S4 lands
+    # src/listener.js (mounted :ro), the same line execs the listener; no
+    # compose edit is needed at that point.
+    command: |
+      sh -c '
+      if [ ! -f /app/src/listener.js ]; then
+        echo "listener: src/listener.js not present yet (S4); staying dormant"
+        exec sleep infinity
+      fi
+      exec node /app/src/listener.js'
 
 networks:
   actual_net:
