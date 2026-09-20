@@ -62,6 +62,17 @@ category allow-list test pass an extra `-e "TELEGRAM_CATEGORIES=Renta,..."`.)
 
 ## Gotchas (learned the hard way)
 
+- **First upgrade from the old single-service compose (one-time conflict).**
+  The old compose ran one service `actual-notifier` with
+  `container_name: actual_notifier`. The new compose creates
+  `notifier-cron` with the **same** container name — compose sees the old
+  container as an orphan (different project) and fails with
+  `Conflict. The container name "/actual_notifier" is already in use`.
+  It is safe to remove (state lives in host `data/` and `.env`):
+  ```bash
+  docker rm -f actual_notifier
+  docker compose up -d --remove-orphans
+  ```
 - **Rotating `TELEGRAM_BOT_TOKEN` requires resetting the poll offset.**
   `poll_offset` is a per-bot server-side counter stored in `data/notifier.db`
   (`kv` table). After swapping bots (or on a token rotation) the listener
