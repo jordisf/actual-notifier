@@ -1,0 +1,63 @@
+name: actual-budget-dev
+
+services:
+  actual-server:
+    image: actualbudget/actual-server:26.8.0
+    container_name: actual-budget
+    restart: unless-stopped
+    ports:
+      - '5006:5006'
+    environment:
+      - PORT=5006
+    volumes:
+      - ./.actual-data:/data
+    healthcheck:
+      test: ['CMD', 'node', '-e', "fetch('http://localhost:5006/').then(response => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 2s
+      timeout: 2s
+      retries: 15
+      start_period: 5s
+
+  # One-shot: sets the password on a fresh server via the /bootstrap endpoint
+  # (only works once, before any user/password exists on the volume).
+  # Usage from the repo root:
+  #   docker compose -f actual-budget/docker-compose.yml run --rm bootstrap
+  bootstrap:
+    image: node:20-slim
+    container_name: actual-budget-bootstrap
+    network_mode: service:actual-server
+    command: >
+      node -e "
+      fetch('http://localhost:5006/account/bootstrap', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({password: 'dev-seed-password'})
+      }).then(async r => { console.log(r.status, await r.text()); });
+      "
+    depends_on:
+      - actual-server
+    profiles: ['tools']
+    restart: 'no'
+
+  # One-shot seeder: crea el presupuesto determinista "dev-budget" con datos conocidos.
+  # Uso desde la raiz del repo:  docker compose -f actual-budget/docker-compose.yml run --rm seed
+  seed:
+    build: ./seed-data
+    container_name: actual-budget-seed
+    command: ['sh', '-c', 'npm install --no-audit --no-fund && node seed.js']
+    environment:
+      - ACTUAL_URL=http://actual-budget:5006
+      - ACTUAL_PASSWORD=dev-seed-password
+      - TZ=Europe/Madrid
+      - SNAPSHOT_DIR=/data-out
+    volumes:
+      - ./.actual-data:/data-out
+    depends_on:
+      - actual-server
+    profiles: ['tools']
+    restart: 'no'
+
+networks:
+  default:
+    name: actual_net
+    external: true

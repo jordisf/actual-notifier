@@ -1,0 +1,13 @@
+{
+  "name": "actual-budget-dev-seed",
+  "version": "1.0.0",
+  "private": true,
+  "description": "One-shot seeder that creates the deterministic dev-budget for actual-notifier development",
+  "main": "seed.js",
+  "scripts": {
+    "start": "node seed.js"
+  },
+  "dependencies": {
+    "@actual-app/api": "^26.8.1"
+  }
+}

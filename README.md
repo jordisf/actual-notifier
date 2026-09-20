@@ -116,6 +116,59 @@ El script crea una caché local en `/tmp/actual-cache`. `dotenv` se carga con `o
 
 ---
 
+## Entorno de desarrollo (Actual Budget con datos conocidos)
+
+Para testear el script sin tocar la instancia real ni depender de la sincronización bancaria, existe un entorno de desarrollo completamente local: una instancia de **Actual Budget en Docker** sembrada con datos de inicio **determinísticos y documentados**, más un **Mailpit** que captura los correos en su lugar de un SMTP real. La llegada de operaciones nuevas se **emula** simplemente re-sembrando o añadiendo transacciones a la instancia de desarrollo.
+
+### Componentes
+
+| Fichero | Rol |
+|---|---|
+| `actual-budget/docker-compose.yml` | Servicio `actual-server` (imagen fijada a `26.8.0`) y herramientas one-shot `bootstrap`/`seed` sobre la red compartida `actual_net`. |
+| `actual-budget/seed-data/` | Seeder Node.js (`seed.js` + `Dockerfile`): crea el presupuesto `dev-budget` con cuentas, categorías, presupuestos mensuales y transacciones conocidas. |
+| `dev.yml` | Overlay Compose: añade **Mailpit** (UI en `:8025`, SMTP en `:1025`) y el contenedor `actual-notifier` apuntando a la instancia de desarrollo. |
+| `.env.dev` | Configuración de desarrollo del notifier (copia a `.env` después de sembrar). |
+
+### Arranque
+
+```bash
+# 1. Red compartida (una sola vez)
+docker network create actual_net
+
+# 2. Actual Budget en desarrollo (espera hasta que esté saludable)
+docker compose -f actual-budget/docker-compose.yml up -d --wait actual-server
+
+# 3. Inicializar la contraseña y sembrar los datos (one-shot; imprime ACTUAL_SYNC_ID)
+docker compose -f actual-budget/docker-compose.yml --profile tools run --rm bootstrap
+docker compose -f actual-budget/docker-compose.yml --profile tools run --rm seed
+
+# 4. Configurar el notifier
+cp .env.dev .env   # y pegar el ACTUAL_SYNC_ID (groupId) impreso por el seed
+
+# 5. Arrancar Mailpit + notifier de desarrollo
+docker compose -f actual-budget/docker-compose.yml -f dev.yml up -d
+
+# 6. Ejecutar el reporte a demanda (no esperar al cron)
+docker compose -f actual-budget/docker-compose.yml -f dev.yml exec actual-notifier node src/reporte-diario.js
+```
+
+### Datos sembrados (estado esperado documentado)
+
+El seeder documenta en su cabecera (`actual-budget/seed-data/seed.js`) el estado exacto que produce el reporte:
+
+- **Categorías objetivo** (mes en curso, con *carryover*):
+   `Gasto Personal` +5,00 €, `Farmacia y Botiquin` +17,30 €, `Supermercado y Alimentación` +48,90 €, `Ocio y Restaurantes` -9,00 €, `Transporte` 0,00 €.
+- **Sobregasto no monitorizado:** `Suscripciones` en **-7,50 €** (dispara la alerta de saldo negativo).
+- **Saldo a cero no monitorizado:** `Internet y Teléfono` en 0,00 € (sin alerta, sin ritmo).
+- **Sin categorizar ( exactamente 2):** nómina entrante en `Cuenta Nómina` (+195,00 €) y un gasto sin categoría en `Cuenta Corriente` (-15,00 €).
+- **Casos de exclusión** (no deben aparecer): transferencia interna alquiler (par con `transfer_id`), split de farmacia (padre sin categoría con `is_parent` + dos hijos con categoría), y gasto en `Caja` (cuenta *off-budget*).
+
+Para **reiniciar** el estado de desarrollo: baja el stack y elimina `actual-budget/.actual-data/`; luego repite los pasos 2 a 5. Un snapshot exportable (`dev-budget-snapshot.zip`) se genera en `actual-budget/.actual-data/`.
+
+> La instancia de desarrollo no tiene cuentas bancarias conectadas. El script sigue ejecutando su intento de sincronización, que puede informar éxito sin descargar operaciones. Los movimientos de prueba se emulan reiniciando y re-sembrando el entorno.
+
+---
+
 ## Estructura del proyecto
 
 ```

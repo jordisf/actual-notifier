@@ -1,0 +1,49 @@
+# Dev overlay: Mailpit (SMTP sink) + the notifier container wired to the
+# dev Actual Budget instance.
+#
+#   docker compose -f actual-budget/docker-compose.yml -f dev.yml up -d
+#   docker compose -f actual-budget/docker-compose.yml run --rm seed
+#   # edit .env with the ACTUAL_SYNC_ID printed by the seed, then:
+#   cp .env.dev .env
+#   docker compose -f actual-budget/docker-compose.yml -f dev.yml up -d actual-notifier
+#
+# Emails land in the Mailpit UI:  http://localhost:8025
+
+name: actual-budget-dev
+
+services:
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: mailpit
+    environment:
+      - MP_SMTP_AUTH_ACCEPT_ANY=1
+      - MP_SMTP_AUTH_ALLOW_INSECURE=1
+      - MP_DATABASE=/data/mailpit.db
+    volumes:
+      - mailpit-data:/data
+    ports:
+      - '1025:1025'
+      - '8025:8025'
+
+  actual-notifier:
+    build: ../
+    container_name: actual_notifier_dev
+    restart: no
+    environment:
+      ACTUAL_SERVER_URL: http://actual-budget:5006
+      ACTUAL_PASSWORD: dev-seed-password
+    volumes:
+      - ../src:/app/src:ro
+      - ../crontab.txt:/app/crontab.txt:ro
+      - ../.env:/app/.env:ro
+    depends_on:
+      actual-server:
+        condition: service_healthy
+
+volumes:
+  mailpit-data:
+
+networks:
+  default:
+    name: actual_net
+    external: true
