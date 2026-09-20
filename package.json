@@ -1,0 +1,13 @@
+{
+  "name": "actual-notifier",
+  "version": "1.0.0",
+  "main": "src/reporte-diario.js",
+  "scripts": {
+    "start": "node src/reporte-diario.js"
+  },
+  "dependencies": {
+    "@actual-app/api": "^26.8.1",
+    "dotenv": "^16.4.5",
+    "nodemailer": "^6.9.13"
+  }
+}

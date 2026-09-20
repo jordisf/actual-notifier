@@ -1,0 +1,10 @@
+{
+  "servers": {
+    "engram": {
+      "command": "C:\\Users\\Jordi\\go\\bin\\engram.exe",
+      "args": [
+        "mcp"
+      ]
+    }
+  }
+}
