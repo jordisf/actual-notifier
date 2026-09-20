@@ -71,7 +71,7 @@ El contenedor arranca `cron` e instala la planificación definida en [crontab.tx
    docker compose up -d --build
    ```
 
-Los volúmenes montan `src/`, `crontab.txt` y `.env` en modo solo lectura, por lo que puedes cambiar el código, la planificación o las credenciales **sin reconstruir la imagen** (basta con reiniciar el contenedor).
+Los volúmenes montan `src/`, `crontab.txt` y `.env` en modo solo lectura, por lo que puedes cambiar el código, la planificación o las credenciales **sin reconstruir la imagen** (basta con reiniciar el contenedor). Las actualizaciones posteriores (git pull → up) y el checklist de producción están en [DEPLOY.md](DEPLOY.md).
 
 ### Cambiar la planificación
 
@@ -85,13 +85,13 @@ docker compose restart
 
 ```bash
 docker compose logs -f            # salida del contenedor / cron
-docker compose exec actual-notifier cat /var/log/cron.log   # log del job
+docker compose exec actual_notifier cat /var/log/cron.log   # log del job
 ```
 
 ### Ejecución manual (una sola vez)
 
 ```bash
-docker compose exec actual-notifier node src/reporte-diario.js
+docker compose exec actual_notifier node src/reporte-diario.js
 ```
 
 ---
@@ -126,7 +126,7 @@ Para testear el script sin tocar la instancia real ni depender de la sincronizac
 |---|---|
 | `actual-budget/docker-compose.yml` | Servicio `actual-server` (imagen fijada a `26.8.0`) y herramientas one-shot `bootstrap`/`seed` sobre la red compartida `actual_net`. |
 | `actual-budget/seed-data/` | Seeder Node.js (`seed.js` + `Dockerfile`): crea el presupuesto `dev-budget` con cuentas, categorías, presupuestos mensuales y transacciones conocidas. |
-| `dev.yml` | Overlay Compose: añade **Mailpit** (UI en `:8025`, SMTP en `:1025`) y el contenedor `actual-notifier` apuntando a la instancia de desarrollo. |
+| `dev.yml` | Overlay Compose: añade **Mailpit** (UI en `:8025`, SMTP en `:1025`) y el contenedor `actual_notifier_dev` apuntando a la instancia de desarrollo. |
 | `.env.dev` | Configuración de desarrollo del notifier (copia a `.env` después de sembrar). |
 
 ### Arranque
@@ -149,7 +149,7 @@ cp .env.dev .env   # y pegar el ACTUAL_SYNC_ID (groupId) impreso por el seed
 docker compose -f actual-budget/docker-compose.yml -f dev.yml up -d
 
 # 6. Ejecutar el reporte a demanda (no esperar al cron)
-docker compose -f actual-budget/docker-compose.yml -f dev.yml exec actual-notifier node src/reporte-diario.js
+docker compose -f actual-budget/docker-compose.yml -f dev.yml exec actual_notifier_dev node src/reporte-diario.js
 ```
 
 ### Datos sembrados (estado esperado documentado)
