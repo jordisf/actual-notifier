@@ -222,6 +222,7 @@ Original open questions closed with these answers; they are the design input now
 | D8 | Persistence tech | **SQLite** (recommended option accepted). |
 | D9 | Bot availability | Yes — user will create the bot via @BotFather (v1 uses a **group**, so the `/start`-for-DM constraint does not apply; bot must be added to the private group). |
 | D10 | Action identity | **Yes** — actions write to Actual Budget with the same credentials as the cron run. |
+| D11 | Validation target | The repo now includes a **local dev environment** (`actual-budget/` compose + deterministic `dev-budget` seed + `dev.yml` overlay with Mailpit, feature `dev-actual-budget`). **All functional validation of this change runs against that dev Actual instance**, not production. Details in design §12A. |
 
 ### Consequences for scope (v1)
 

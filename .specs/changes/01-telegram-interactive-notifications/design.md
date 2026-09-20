@@ -475,8 +475,9 @@ No test runner exists; the plan is a scripted manual pass, all executable in-pla
 6. **Live cutover**: set real `TELEGRAM_BOT_TOKEN`/`TELEGRAM_GROUP_ID`, bot in the group. One real day: email + summary + per-tx messages arrive; tap a real category in the group → message edited to ✅, Actual Budget shows the tx categorized (verify in Actual UI / API), second person taps the same message → "ya respondido por X", Actual unchanged (single write — confirm via `answers` table: one `applied`).
 7. **Restart survival**: `docker compose restart notifier-listener` after a delivered day, tap a still-pending button → action applies (offset + store survived).
 8. **Failure containment**: stop Telegram-side (temporarily disable the bot token) → cron run logs the error, **exits 0**, email delivered; with SMTP disabled, Telegram path still runs; both down → documented, no crash loop.
-9. **Budget regression check (proposal SC7)**: compare this run's email numbers against the previous day's format/numbers with a controlled budget (no changes) — computation is extracted verbatim, so any diff is a refactor bug.
+9. **Budget regression check (proposal SC7)**: compare this run's email numbers against the previous day's format/numbers with a controlled budget (no changes) — computation is extracted verbatim, so any diff is a refactor bug. Use the **dev seeded instance** (§12A) as the controlled budget — its expected balances and the exact-2-uncategorized invariant are documented in the seed header and in `odd/tasks/dev-actual-budget.md` "evidencia por tarea" (T6 e2e already confirmed: 2 sin categorizar + Suscripciones −7,50 €).
 10. **Credential precondition**: confirm rotation of `.env` secrets (as-is.md S1) is done before the live cutover in step 6. Gate, not a test.
+11. **Dev-instance end-to-end (default validation path)**: run the full plan on the dev stack per §12A — `docker compose -f actual-budget/docker-compose.yml -f dev.yml up -d`, seed, then delivery → exactly 2 interactive messages → live tap categorizes the tx in the dev Actual (verified in UI) → second tap "ya respondido" → re-seed/second delivery expires previous interactions.
 
 ---
 
@@ -497,17 +498,23 @@ No test runner exists; the plan is a scripted manual pass, all executable in-pla
 
 ---
 
-## Appendix A — Decision register (this phase)
+## 12A. Development Environment as Validation Target (2026-09-20, added after dev env landed)
 
-| # | Decision | Choice | Key reason |
-|---|---|---|---|
-| P1 | Process topology | **Two compose services**, one image | Independent crash/restart isolation; no supervisor code |
-| P2 | Telegram client | **Bare Bot API + global fetch** | 4 endpoints; zero new dependencies |
-| P3 | Poll offset store | **SQLite `kv` table**, persist after processing | Survives restarts; at-least-once safe |
-| P4 | `callback_data` | **`v1:<itemRef>:<actionRef>`**, DB-resolved refs | 64-byte limit + long Spanish category names |
-| P5 | Tx→message ratio | **1 tx = 1 message**, cap 15/day (config) | Edit/first-answer-wins clarity; 4096 math trivial |
-| P6 | Actual lifecycle for actions | **init→action→shutdown per tap** | No warm-state hazard; crash dies with process |
-| P7 | dataDir sharing | **Separate dirs per process** | No safe-concurrency guarantee from `@actual-app/api` |
-| P8 | Writable volume | **Bind `./data:/app/data`** | Host-visible ops consistent with repo style |
-| P9 | First-answer-wins | **Guarded UPDATE + `changes()`** | Atomic, restart/replay safe, single hot writer |
-| P10 | Dry-run mode | **`TELEGRAM_DRY_RUN`** (in scope, small) | Only way to verify steps 1–5 without credentials live |
+The repo now ships a fully local dev environment (feature `dev-actual-budget`, tracked in `odd/tasks/dev-actual-budget.md`):
+
+- `actual-budget/docker-compose.yml` — `actual-server` (image `actualbudget/actual-server:26.8.0`, healthcheck) + one-shot `bootstrap` (sets password `dev-seed-password`) + one-shot `seed`, all on the **external `actual_net`** network (same network the production notifier uses).
+- `actual-budget/seed-data/seed.js` — deterministic `dev-budget` via `api.runImport`: 4 accounts (`Cuenta Corriente`, `Cuenta Nómina`, `Tarjeta Crédito` on-budget; `Caja` off-budget), 9 categories (5 monitored with correct accents, `Nómina` income, `Renta`, `Internet y Telefono`, `Suscripciones`), current + previous month transactions with splits/transfers, idempotent (reset = delete `.actual-data/`).
+- `dev.yml` — overlay adding `mailpit` (SMTP sink, UI `http://localhost:8025`) and `actual-notifier` (container `actual_notifier_dev`, env from `../.env` mounted `:ro`, `depends_on` actual-server healthy). Bring-up documented in README → "Entorno de desarrollo"; `.env.dev` is the `.env` template for dev (Mailpit SMTP + `dev-seed-password` + `ACTUAL_SYNC_ID` from seed output).
+
+**Documented expected seed state → deterministic validation targets for THIS feature:**
+
+1. Paso-2 (uncategorized, current month, on-budget) MUST be exactly **2 transactions**: `Cuenta Nómina / "Nomina empresa" / +195.00` and `Cuenta Corriente / "Compra suelta" / -15.00`. The feature must post **exactly 2 interactive messages**; every seeded transfer/split/off-budget tx is a negative case that must NOT appear.
+2. Keyboard button set MUST be exactly the **8 non-income categories** (5 monitored + `Renta` + `Internet y Telefono` + `Suscripciones`) + dismiss → **a single button row of 8 + one dismiss row**. Dev also validates the cap/overflow layout math from §4 (re-seeding more categories is a cheap way to test the 8-per-row wrap).
+3. **Real write-back against a REAL dev instance**: tap a category on the `Compra suelta` message → the actual API call runs against `http://actual-budget:5006`; verify in the Actual UI that the tx moved from "Sin categoría" to the chosen category and that the next cron run's paso-2 count drops to 1. This is stronger than dry-run: it exercises the exact `@actual-app/api` method (clears apply-risk #1 from §6.2 against the real 26.8.x server, not just the installed client library).
+4. **Expiry (D6) is cheaply testable**: re-seed (or re-run the seeder after deleting `.actual-data/`) or simply trigger a second manual delivery → previous run's interactions must flip to `expired`.
+5. **Idempotency/first-answer-wins**: `replay-callback.js` synthetic taps + two-tap-on-same-message check against the live dev messages.
+6. **Credential note**: in dev, "same credentials as cron" (D10) = `dev-seed-password`, already shared via the mounted `.env`; no extra secret. Telegram token/group can remain empty (email-only graceful mode) or point at a real test group — dev validation works **with or without** a live bot; steps without a bot use dry-run + replay helper per §12.
+
+**Compose integration in dev:** `dev.yml` currently overrides `actual-notifier` (single service). This change adds the **listener as a second dev service** in the same overlay (`notifier-listener_dev`, `command: node src/listener.js`, same mounts + a writable `./data` bind, `restart: no`, no inbound ports). Production `docker-compose.yml` gets the two-service split per §1; `dev.yml` mirrors it so the exact same code paths run in both.
+
+**Boundary (do not cross):** the dev instance is for validating THIS feature in the development phase. Production cutover (live group, rotation gate) remains §12 step 10. Never run a non-dev `.env` against the dev `actual-server`.
