@@ -85,6 +85,19 @@ const TX_PRESETS = {
     index: undefined,
     total: undefined,
   },
+  // The five fixed household categories, in their usual order.
+  fijas: {
+    tx: { fecha: '2026-09-21', beneficiario: 'Compra suelta', cuenta: 'Cuenta Corriente', importe: -15 },
+    index: 2,
+    total: 3,
+    cats: [
+      'Gasto Personal',
+      'Farmacia y Botiquin',
+      'Ocio y Restaurantes',
+      'Transporte',
+      'Supermercado y Alimentación',
+    ],
+  },
 };
 
 function runTxMode(sendFlag) {
@@ -107,7 +120,10 @@ function runTxMode(sendFlag) {
     console.error('Falta TELEGRAM_BOT_TOKEN o TELEGRAM_GROUP_ID en el .env (o ambiente).');
     process.exit(1);
   }
-  const { keyboard } = buildKeyboard(CATS_DUMMY, 'preview00000001');
+  const cats = (p.cats || CATS_DUMMY).map((c, i) =>
+    typeof c === 'string' ? { id: `p${i}`, name: c } : c
+  );
+  const { keyboard } = buildKeyboard(cats, 'preview00000001');
   bot
     .sendMessage(process.env.TELEGRAM_GROUP_ID, text, { inline_keyboard: keyboard })
     .then((res) => console.log(`Enviado al grupo (message_id=${res && res.message_id}).`))

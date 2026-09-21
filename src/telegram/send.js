@@ -30,11 +30,28 @@ const bot = require('./bot');
 const store = require('../store');
 const { log } = require('../log');
 
-const MAX_BUTTONS_PER_ROW = 8;
 const MAX_LABEL_CHARS = 97;
 const MAX_CALLBACK_DATA_BYTES = 64;
 const DISMISS = { ref: '-', cat_id: null, label: '🚫 Sin categorizar' };
 const DEFAULT_MAX_TX = 15;
+
+// Keyboard layout (mobile): two buttons share a row when the SUM of their
+// label widths fits the row budget; a long label takes the whole row by
+// itself. Telegram gives every button in a row an equal share of its width
+// and centers the label, which is the closest the API allows to padded
+// equal-width buttons. Emoji count double (visual width).
+const ROW_CHAR_BUDGET = 36;
+
+/** Visual label width: chars, with emoji/symbols counting as 2 units. */
+function labelWidth(label) {
+  const s = String(label || '');
+  let w = 0;
+  for (const ch of s) {
+    const cp = ch.codePointAt(0);
+    w += cp >= 0x1f000 || (cp >= 0x2600 && cp <= 0x27bf) || cp === 0x200d || cp === 0xfe0f ? 2 : 1;
+  }
+  return w;
+}
 
 function truncateLabel(label) {
   const s = String(label || '');
@@ -51,6 +68,11 @@ function truncate(s, n) {
  * categories: [{ id, name }] (non-income, from actual.getCategories).
  * itemRef:    base36 interaction id (goes into callback_data).
  *
+ * Layout: two category buttons share a row only when their combined label
+ * width fits ROW_CHAR_BUDGET; otherwise each takes a full-width row. This
+ * keeps short names side-by-side (centered in equal cells by Telegram) and
+ * lets long names stretch to the full row width instead of being squashed.
+ *
  * Returns { rows, keyboard }:
  *   rows     — storage form for button_rows_json:
  *              [[{ref, cat_id, label}, ...], ..., [{ref:'-', ...}]]
@@ -62,11 +84,20 @@ function buildKeyboard(categories, itemRef) {
     cat_id: c.id,
     label: truncateLabel(c.name),
   }));
+
+  // Pack two-per-row where the combined width fits; singles otherwise.
   const rows = [];
-  for (let i = 0; i < buttons.length; i += MAX_BUTTONS_PER_ROW) {
-    rows.push(buttons.slice(i, i + MAX_BUTTONS_PER_ROW));
+  let i = 0;
+  while (i < buttons.length) {
+    if (i + 1 < buttons.length && labelWidth(buttons[i].label) + labelWidth(buttons[i + 1].label) <= ROW_CHAR_BUDGET) {
+      rows.push([buttons[i], buttons[i + 1]]);
+      i += 2;
+    } else {
+      rows.push([buttons[i]]);
+      i += 1;
+    }
   }
-  // CI-3: the dismiss button always occupies its OWN final row.
+  // CI-3: the dismiss button always occupies its OWN final row, full width.
   rows.push([{ ref: DISMISS.ref, cat_id: DISMISS.cat_id, label: DISMISS.label }]);
 
   const keyboard = rows.map((row) =>
