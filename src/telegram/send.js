@@ -173,14 +173,19 @@ function buildSummaryText({ mesActual, syncMensaje, txList, datosConsumo, catego
   return lines.join('\n');
 }
 
-/** Per-tx interactive message text (design §4.4). index/total optional. */
+/** Per-tx interactive message text (design §4.4). index/total optional.
+ * Layout (mobile-safe blocks, blank line between each):
+ *   header / date · payee / Importe: X (cuenta) / "Toca la categoría:"
+ */
 function buildTxText(tx, index, total) {
   const head =
     index != null ? `🔍 ${index} de ${total} · Sin categorizar` : '🔍 Sin categorizar';
   return [
     head,
-    `${formatDia(tx.fecha)} · ${tx.beneficiario} (${tx.cuenta})`,
-    `Importe: ${formatImporte(tx.importe)}`,
+    '',
+    `${formatDia(tx.fecha)} · ${tx.beneficiario}`,
+    '',
+    `Importe: ${formatImporte(tx.importe)} (${tx.cuenta})`,
     '',
     'Toca la categoría:',
   ].join('\n');
