@@ -100,34 +100,25 @@ function mesLabel(mesActual) {
 
 /**
  * Plain-text summary message (design §4.4 — informational, NO keyboard):
- * title, month, bank sync state, uncategorized count + tx list
- * (date · payee · amount · account), consumption and overspend lines.
- * When the per-tx cap is hit, the omitted count is noted here.
+ * title, month, bank sync state, uncategorized count, consumption and
+ * overspend lines. Subsections are separated by blank lines for readability.
+ * Per-tx interactive messages are sent separately below this summary, so
+ * the summary itself only carries the count.
  */
-function buildSummaryText({ mesActual, syncMensaje, txList, capped, datosConsumo, categoriasNegativas }) {
+function buildSummaryText({ mesActual, syncMensaje, txList, datosConsumo, categoriasNegativas }) {
   const lines = [];
   lines.push(`📊 Reporte diario — ${mesLabel(mesActual)}`);
+  lines.push('');
   lines.push(`🔄 Banco: ${truncate(syncMensaje || 'estado desconocido', 120)}`);
-
-  const total = txList.length;
-  const omitted = total - capped.length;
-  if (total > 0) {
-    const botonNota = omitted > 0 ? ` → ${capped.length} mensajes con botones (${omitted} omitidos, solo en este resumen)` : ` → ${capped.length} mensaje${capped.length === 1 ? '' : 's'} debajo con botones`;
-    lines.push(`🔍 Pendientes sin categorizar: ${total}${botonNota}`);
-    for (const tx of capped) {
-      lines.push(`   ${formatDia(tx.fecha)} · ${tx.beneficiario} (${formatImporte(tx.importe)}) · ${tx.cuenta}`);
-    }
-    if (omitted > 0) {
-      for (const tx of txList.slice(capped.length)) {
-        lines.push(`   ${formatDia(tx.fecha)} · ${tx.beneficiario} (${formatImporte(tx.importe)}) · ${tx.cuenta} — sin botones`);
-      }
-    }
-  } else {
-    lines.push('🔍 Pendientes sin categorizar: 0');
-  }
+  lines.push('');
+  lines.push(`🔍 Pendientes sin categorizar: ${txList.length}`);
+  lines.push('');
 
   for (const c of datosConsumo || []) {
     lines.push(`🛒 ${c.nombre}: ${formatImporte(c.saldo)} (${c.ritmoDiario} €/día)`);
+  }
+  if (datosConsumo && datosConsumo.length > 0) {
+    lines.push('');
   }
   for (const cn of categoriasNegativas || []) {
     lines.push(`⚠️ Sobregasto: ${cn.nombre} ${formatImporte(cn.saldo)}`);
@@ -195,7 +186,6 @@ async function sendReport({ db, chatId, reportId, txList, categories, mesActual,
     mesActual,
     syncMensaje,
     txList: sorted,
-    capped,
     datosConsumo,
     categoriasNegativas,
   });
