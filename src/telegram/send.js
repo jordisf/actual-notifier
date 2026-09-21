@@ -98,21 +98,6 @@ function mesLabel(mesActual) {
   return d.toLocaleDateString('es-ES');
 }
 
-/**
- * Telegram mobile wraps any line wider than roughly 35–40 chars (emoji width
- * varies), so a value that doesn't fit gets its own indented second line.
- * Lines under the threshold stay compact on one line.
- */
-const MAX_SUMMARY_LINE = 40;
-function wrapValueRow(emoji, label, value) {
-  const first = `${emoji} ${label}`;
-  return value == null
-    ? [first]
-    : `${first}${value}`.length > MAX_SUMMARY_LINE
-      ? [first, `   ${value}`]
-      : [`${first}: ${value}`];
-}
-
 /** Compact bank-sync line for the summary (the email keeps the full message). */
 function bankSyncLine(syncMensaje) {
   const texto = String(syncMensaje || '');
@@ -133,11 +118,19 @@ function ritmoEs(ritmoDiario) {
 }
 
 /**
+ * Value line indent for the two-line item layout: the amount starts well to
+ * the right of the category-name start, below the emoji's right edge
+ * (mobile fonts are proportional, so a roomy indent is the safe bet).
+ */
+const VALUE_INDENT = '        '; // 8 spaces
+
+/**
  * Plain-text summary message (design §4.4 — informational, NO keyboard):
- * title, month, compact bank sync state, uncategorized count, per-category
- * balance + daily pace, and overspend lines. Subsections are separated by
- * blank lines; each item stays on one line when it fits the mobile width,
- * otherwise the value drops to an indented second line.
+ * title, month, compact bank sync state, uncategorized count, and one
+ * item per category for consumption balances and overspends. Subsections
+ * are separated by blank lines. Every category item uses a fixed two
+ * mobile-safe line: the name alone on the first line, the value indented
+ * on the second, so a long category name can never cause a ragged wrap.
  * Per-tx interactive messages are sent separately below this summary, so
  * the summary itself only carries the count.
  */
@@ -145,23 +138,21 @@ function buildSummaryText({ mesActual, syncMensaje, txList, datosConsumo, catego
   const lines = [];
   lines.push(`📊 Reporte diario — ${mesLabel(mesActual)}`);
   lines.push('');
-  lines.push(...wrapValueRow('🔄', 'Banco', bankSyncLine(syncMensaje)));
+  lines.push(`🔄 Banco: ${bankSyncLine(syncMensaje)}`);
   lines.push('');
   lines.push(`🔍 Pendientes sin categorizar: ${txList.length}`);
   lines.push('');
 
   for (const c of datosConsumo || []) {
-    lines.push(...wrapValueRow('🛒', c.nombre, `${formatImporte(c.saldo)} (${ritmoEs(c.ritmoDiario)} €/día)`));
+    lines.push(`🛒 ${c.nombre}`);
+    lines.push(`${VALUE_INDENT}${formatImporte(c.saldo)} (${ritmoEs(c.ritmoDiario)} €/día)`);
   }
   if (datosConsumo && datosConsumo.length > 0) {
     lines.push('');
   }
   for (const cn of categoriasNegativas || []) {
-    const first = `⚠️ Sobregasto: ${cn.nombre}`;
-    const value = ` ${formatImporte(cn.saldo)}`;
-    lines.push(...(`${first}${value}`.length > MAX_SUMMARY_LINE
-      ? [first, `   ${formatImporte(cn.saldo)}`]
-      : [`${first}${value}`]));
+    lines.push(`⚠️ Sobregasto: ${cn.nombre}`);
+    lines.push(`${VALUE_INDENT}${formatImporte(cn.saldo)}`);
   }
   return lines.join('\n');
 }
