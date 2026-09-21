@@ -123,9 +123,11 @@ function formatImporte(euros) {
   return `${sign}${Math.abs(euros).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`;
 }
 
-/** today (local) -> '21/9/2026' — report issue date, not the month. */
+/** today (local) -> '21/09/2026' — fixed-width issue date, same style as formatDia. */
 function hoyLabel() {
-  return new Date().toLocaleDateString('es-ES');
+  const d = new Date();
+  const p = (n) => String(n).padStart(2, '0');
+  return `${p(d.getDate())}/${p(d.getMonth() + 1)}/${d.getFullYear()}`;
 }
 
 /** Compact bank-sync line for the summary (the email keeps the full message). */
