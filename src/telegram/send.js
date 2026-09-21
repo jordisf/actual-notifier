@@ -123,10 +123,9 @@ function formatImporte(euros) {
   return `${sign}${Math.abs(euros).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`;
 }
 
-/** 'YYYY-MM' -> '20/09/2026' */
-function mesLabel(mesActual) {
-  const d = new Date(`${mesActual}-01T12:00:00`);
-  return d.toLocaleDateString('es-ES');
+/** today (local) -> '21/9/2026' — report issue date, not the month. */
+function hoyLabel() {
+  return new Date().toLocaleDateString('es-ES');
 }
 
 /** Compact bank-sync line for the summary (the email keeps the full message). */
@@ -183,7 +182,7 @@ const VALUE_INDENT = '        '; // 8 spaces
  */
 function buildSummaryText({ mesActual, syncMensaje, txList, datosConsumo, categoriasNegativas }) {
   const lines = [];
-  lines.push(`📊 Reporte diario — ${mesLabel(mesActual)}`);
+  lines.push(`📊 Reporte diario — ${hoyLabel()}`);
   lines.push('');
   lines.push(`🔄 Banco: ${bankSyncLine(syncMensaje)}`);
   lines.push('');
