@@ -117,6 +117,20 @@ function ritmoEs(ritmoDiario) {
   });
 }
 
+/** HTML-escape user-provided text (category names) for parse_mode=HTML. */
+function htmlEscape(s) {
+  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+/**
+ * Telegram has no colored text, so negative amounts are marked with a red
+ * triangle + bold (parse_mode=HTML):  🔻 −9,00 €. Non-negatives stay plain.
+ */
+function importeHtml(euros) {
+  const plain = formatImporte(euros);
+  return euros < 0 ? `🔻 <b>${plain}</b>` : plain;
+}
+
 /**
  * Value line indent for the two-line item layout: the amount starts well to
  * the right of the category-name start, below the emoji's right edge
@@ -131,6 +145,8 @@ const VALUE_INDENT = '        '; // 8 spaces
  * are separated by blank lines. Every category item uses a fixed two
  * mobile-safe line: the name alone on the first line, the value indented
  * on the second, so a long category name can never cause a ragged wrap.
+ * Negative amounts are highlighted (🔻 + bold) — the output is sent with
+ * parse_mode=HTML, so category names are HTML-escaped.
  * Per-tx interactive messages are sent separately below this summary, so
  * the summary itself only carries the count.
  */
@@ -144,15 +160,15 @@ function buildSummaryText({ mesActual, syncMensaje, txList, datosConsumo, catego
   lines.push('');
 
   for (const c of datosConsumo || []) {
-    lines.push(`🛒 ${c.nombre}`);
-    lines.push(`${VALUE_INDENT}${formatImporte(c.saldo)} (${ritmoEs(c.ritmoDiario)} €/día)`);
+    lines.push(`🛒 ${htmlEscape(c.nombre)}`);
+    lines.push(`${VALUE_INDENT}${importeHtml(c.saldo)} (${ritmoEs(c.ritmoDiario)} €/día)`);
   }
   if (datosConsumo && datosConsumo.length > 0) {
     lines.push('');
   }
   for (const cn of categoriasNegativas || []) {
-    lines.push(`⚠️ Sobregasto: ${cn.nombre}`);
-    lines.push(`${VALUE_INDENT}${formatImporte(cn.saldo)}`);
+    lines.push(`⚠️ Sobregasto: ${htmlEscape(cn.nombre)}`);
+    lines.push(`${VALUE_INDENT}${importeHtml(cn.saldo)}`);
   }
   return lines.join('\n');
 }
@@ -220,7 +236,9 @@ async function sendReport({ db, chatId, reportId, txList, categories, mesActual,
     datosConsumo,
     categoriasNegativas,
   });
-  await bot.sendMessage(chatId, summaryText);
+  // parse_mode: 'HTML' so negative amounts render bold. The builder escapes
+  // every user-provided piece (category names), so the markup is ours only.
+  await bot.sendMessage(chatId, summaryText, undefined, 'HTML');
   log('info', 'cron', 'Resumen Telegram enviado (sin botones)', { omitted });
 
   let sent = 0;

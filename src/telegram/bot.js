@@ -94,10 +94,13 @@ async function request(method, params) {
   throw lastError;
 }
 
-/** Send a text message. `replyMarkup` is the inline keyboard object (optional). */
-async function sendMessage(chatId, text, replyMarkup) {
+/** Send a text message. `replyMarkup` is the inline keyboard object (optional);
+ * `parseMode` (optional) is forwarded as parse_mode when set (e.g. 'HTML').
+ */
+async function sendMessage(chatId, text, replyMarkup, parseMode) {
   const params = { chat_id: chatId, text };
   if (replyMarkup) params.reply_markup = replyMarkup;
+  if (parseMode) params.parse_mode = parseMode;
   return request('sendMessage', params);
 }
 
