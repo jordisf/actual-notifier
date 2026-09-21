@@ -29,7 +29,7 @@
 
 const path = require('path');
 const fs = require('fs');
-const { buildSummaryText } = require('../telegram/send');
+const { buildSummaryText, buildTxText, buildKeyboard } = require('../telegram/send');
 const bot = require('../telegram/bot');
 
 // .env mount holds TELEGRAM_* (compose only provides ACTUAL_*).
@@ -47,6 +47,78 @@ function loadEnv(envPath) {
   }
 }
 loadEnv(process.env.DOTENV_PATH || path.join(__dirname, '..', '..', '.env'));
+
+// ---------------------------------------------------------------------------
+// --tx mode: interactive per-transaction message with dummy data
+// ---------------------------------------------------------------------------
+// Dummy category list (a deliberately long name exercises label truncation).
+const CATS_DUMMY = [
+  { id: 'c1', name: 'Gasto Personal' },
+  { id: 'c2', name: 'Supermercado y Alimentación' },
+  { id: 'c3', name: 'Ocio y Restaurantes' },
+  { id: 'c4', name: 'Farmacia y Botiquin' },
+  { id: 'c5', name: 'Transporte' },
+  { id: 'c6', name: 'Mantenimiento del hogar y comunidad de propietarios del edificio' },
+  { id: 'c7', name: 'Suscripciones' },
+  { id: 'c8', name: 'Otro' },
+  { id: 'c9', name: 'Ninguna' },
+];
+
+const TX_PRESETS = {
+  corto: {
+    tx: { fecha: '2026-09-21', beneficiario: 'Cabify ES', cuenta: 'Ing Nomina', importe: -20.82 },
+    index: 1,
+    total: 2,
+  },
+  largo: {
+    tx: {
+      fecha: '2026-09-08',
+      beneficiario: 'Pago en Amazon Marketplace (pedido nº 406-1234567-891012) referencia transfer 99887',
+      cuenta: 'Cuenta Corriente',
+      importe: -249.99,
+    },
+    index: 3,
+    total: 15,
+  },
+  ingreso: {
+    tx: { fecha: '2026-09-01', beneficiario: 'Nomina empresa', cuenta: 'Cuenta Nomina', importe: 195 },
+    index: undefined,
+    total: undefined,
+  },
+};
+
+function runTxMode(sendFlag) {
+  const args = process.argv.slice(2);
+  const name = args.find((a) => !a.startsWith('--'));
+  const key = name ? Object.keys(TX_PRESETS).find((k) => k === name) : 'corto';
+  if (name && !key) {
+    console.error(`Preset --tx desconocido: ${name} (presets: ${Object.keys(TX_PRESETS).join(', ')})`);
+    process.exit(1);
+  }
+  const p = TX_PRESETS[key || 'corto'];
+  const text = buildTxText(p.tx, p.index, p.total);
+  console.log(`--- MENSAJE INTERACTIVO: ${key} (no enviado) ---`);
+  console.log(text);
+  if (!sendFlag) {
+    console.log('--- El envío real incluye el teclado de botones. Añade --send. ---');
+    process.exit(0);
+  }
+  if (!process.env.TELEGRAM_BOT_TOKEN || !process.env.TELEGRAM_GROUP_ID) {
+    console.error('Falta TELEGRAM_BOT_TOKEN o TELEGRAM_GROUP_ID en el .env (o ambiente).');
+    process.exit(1);
+  }
+  const { keyboard } = buildKeyboard(CATS_DUMMY, 'preview00000001');
+  bot
+    .sendMessage(process.env.TELEGRAM_GROUP_ID, text, { inline_keyboard: keyboard })
+    .then((res) => console.log(`Enviado al grupo (message_id=${res && res.message_id}).`))
+    .catch((err) => console.error('Fallo al enviar:', err.message))
+    .finally(() => process.exit(0));
+}
+
+if (process.argv.includes('--tx')) {
+  runTxMode(process.argv.includes('--send'));
+  return; // runTxMode exits via its own process.exit() calls
+}
 
 const CONSUMO_BASE = [
   { nombre: 'Gasto Personal', saldo: 5, ritmoDiario: '0.50' },
@@ -108,6 +180,7 @@ const PRESETS = {
 
 function usage() {
   console.error(`Uso: node preview-telegram.js [preset] [--file modelo.json] [--send]
+      node preview-telegram.js --tx [corto|largo|ingreso] [--send]
 Presets: ${Object.keys(PRESETS).join(', ')}`);
   process.exit(1);
 }
