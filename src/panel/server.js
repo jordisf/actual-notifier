@@ -175,6 +175,8 @@ function createServer(db) {
 
   require('./routes/login').register(router, ctx);
   require('./routes/dashboard').register(router, ctx);
+  require('./routes/telegram').register(router, ctx);
+  require('./routes/reveal').register(router, ctx);
 
   const server = http.createServer(async (req, res) => {
     const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);

@@ -23,6 +23,8 @@
  * the offline replay driver (src/dev/replay-callback.js) without network.
  */
 
+const fs = require('fs');
+const path = require('path');
 const dotenv = require('dotenv');
 
 // NO override: the compose environment is authoritative for this service.
@@ -38,6 +40,34 @@ const { ACTION_REGISTRY } = require('./actions');
 const POLL_TIMEOUT_SEC = 30;
 const BACKOFF_INITIAL_MS = 1000;
 const BACKOFF_MAX_MS = 30000;
+
+// Panel-editable Telegram settings (specs/001-config-webapp FR-007): re-read
+// on every poll iteration so a config-panel save applies within one cycle,
+// with no restart. bot.js's apiUrl() already reads TELEGRAM_BOT_TOKEN from
+// process.env per call, so refreshing it here is enough for token changes;
+// TELEGRAM_GROUP_ID/TELEGRAM_CATEGORIES aren't consumed by this loop today
+// but are kept in sync for consistency and any future in-process use.
+const RELOADABLE_TELEGRAM_KEYS = ['TELEGRAM_BOT_TOKEN', 'TELEGRAM_GROUP_ID', 'TELEGRAM_CATEGORIES', 'TELEGRAM_POLL_TIMEOUT'];
+
+/**
+ * Re-read only the 4 keys above straight from .env into process.env.
+ * Deliberately NOT dotenv.config({override:true}): that would reload every
+ * key (ACTUAL_*, DATA_DIR...) each iteration, disturbing unrelated listener
+ * behavior. A missing/unreadable .env is tolerated — process.env keeps
+ * whatever it already had.
+ */
+function reloadTelegramEnv() {
+  let text;
+  try {
+    text = fs.readFileSync(path.join(process.cwd(), '.env'), 'utf8');
+  } catch {
+    return;
+  }
+  for (const key of RELOADABLE_TELEGRAM_KEYS) {
+    const m = new RegExp(`^${key}=(.*)$`, 'm').exec(text);
+    if (m) process.env[key] = m[1].replace(/\r$/, '');
+  }
+}
 
 /**
  * Module-scoped store handle. main() opens it at boot via setDb(); the
@@ -276,12 +306,14 @@ async function main() {
   let backoff = BACKOFF_INITIAL_MS;
   for (;;) {
     if (stopped) return;
+    reloadTelegramEnv();
     const offset = Number(store.kvGet(db, 'poll_offset') || 0);
+    const pollTimeoutSec = Number(process.env.TELEGRAM_POLL_TIMEOUT) || POLL_TIMEOUT_SEC;
     let updates;
     try {
       updates = await bot.getUpdates({
         offset,
-        timeout: POLL_TIMEOUT_SEC,
+        timeout: pollTimeoutSec,
         allowed_updates: ['callback_query'],
       });
     } catch (err) {

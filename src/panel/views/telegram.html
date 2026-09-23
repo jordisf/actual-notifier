@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Telegram settings — actual-notifier panel</title></head>
+<body>
+<h1>Telegram settings</h1>
+{{errorHtml}}
+<form method="post" action="/telegram">
+  <p>
+    Current bot token: <span id="masked-token">{{maskedToken}}</span>
+    <button type="button" id="reveal-btn">Show</button>
+  </p>
+  <label>New bot token (leave blank to keep current)
+    <input type="password" name="bot_token" autocomplete="off" placeholder="(unchanged)">
+  </label><br>
+  <label>Group id <input type="text" name="group_id" value="{{groupId}}"></label><br>
+  <label>Category allow-list (comma-separated, empty = all)
+    <input type="text" name="categories" value="{{categories}}">
+  </label><br>
+  <label>Poll timeout (seconds)
+    <input type="number" name="poll_timeout" value="{{pollTimeout}}" min="1" max="300" required>
+  </label><br>
+  <label><input type="checkbox" name="clear_telegram"> Disable Telegram (clear bot token and group id)</label><br>
+  <button type="submit">Save</button>
+</form>
+<p><a href="/">Back to dashboard</a></p>
+<script>
+  document.getElementById('reveal-btn').addEventListener('click', function () {
+    fetch('/reveal/telegram-bot-token', { method: 'POST' })
+      .then(function (res) { return res.ok ? res.text() : Promise.reject(new Error('reveal failed')); })
+      .then(function (text) {
+        document.getElementById('masked-token').textContent = text || '(not set)';
+      })
+      .catch(function () {
+        document.getElementById('masked-token').textContent = '(failed to reveal)';
+      });
+  });
+</script>
+</body>
+</html>

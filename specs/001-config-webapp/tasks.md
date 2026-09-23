@@ -69,11 +69,11 @@ Single project (per plan.md). New code lives under `src/panel/` (own container, 
 
 **Independent Test**: Change the Telegram bot token or category allow-list through the panel and confirm the listener behaves according to the new value without anyone running a restart command (spec.md US2).
 
-- [ ] T011 [P] [US2] Implement `GET /telegram` in `src/panel/routes/telegram.js` + `src/panel/views/telegram.html`: render current `TELEGRAM_BOT_TOKEN`, `TELEGRAM_GROUP_ID`, `TELEGRAM_CATEGORIES`, `TELEGRAM_POLL_TIMEOUT` from `config-store.js` (T003), with the bot token masked by default (FR-006, FR-012)
-- [ ] T012 [US2] Implement `POST /telegram` in `src/panel/routes/telegram.js`: validate the new bot token/group id by calling `src/telegram/bot.js` before persisting; on validation failure, re-render the form with the reported error and do not apply the change (FR-007, FR-008) — depends on T011
-- [ ] T013 [US2] Implement `POST /reveal/:field` in `src/panel/routes/reveal.js` (first use: the Telegram bot token), returning the unmasked value only for this explicit request (FR-012)
-- [ ] T014 [US2] Modify `src/listener.js`'s poll loop to re-read `TELEGRAM_BOT_TOKEN`, `TELEGRAM_GROUP_ID`, `TELEGRAM_CATEGORIES`, and `TELEGRAM_POLL_TIMEOUT` from `.env` at the top of each iteration instead of once at boot (currently `dotenv.config()` without `override`, per research.md), so panel-driven changes apply within one poll cycle with no restart (FR-007)
-- [ ] T015 [US2] Register the Telegram section link in `src/panel/routes/dashboard.js` — depends on T009, T011
+- [X] T011 [P] [US2] Implement `GET /telegram` in `src/panel/routes/telegram.js` + `src/panel/views/telegram.html`: render current `TELEGRAM_BOT_TOKEN`, `TELEGRAM_GROUP_ID`, `TELEGRAM_CATEGORIES`, `TELEGRAM_POLL_TIMEOUT` from `config-store.js` (T003), with the bot token masked by default (FR-006, FR-012)
+- [X] T012 [US2] Implement `POST /telegram` in `src/panel/routes/telegram.js`: validate the new bot token/group id by calling `src/telegram/bot.js` before persisting; on validation failure, re-render the form with the reported error and do not apply the change (FR-007, FR-008) — depends on T011
+- [X] T013 [US2] Implement `POST /reveal/:field` in `src/panel/routes/reveal.js` (first use: the Telegram bot token), returning the unmasked value only for this explicit request (FR-012)
+- [X] T014 [US2] Modify `src/listener.js`'s poll loop to re-read `TELEGRAM_BOT_TOKEN`, `TELEGRAM_GROUP_ID`, `TELEGRAM_CATEGORIES`, and `TELEGRAM_POLL_TIMEOUT` from `.env` at the top of each iteration instead of once at boot (currently `dotenv.config()` without `override`, per research.md), so panel-driven changes apply within one poll cycle with no restart (FR-007)
+- [X] T015 [US2] Register the Telegram section link in `src/panel/routes/dashboard.js` — depends on T009, T011
 
 **Checkpoint**: At this point, User Stories 1 AND 2 should both work independently.
 
