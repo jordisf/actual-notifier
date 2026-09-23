@@ -85,11 +85,11 @@ Single project (per plan.md). New code lives under `src/panel/` (own container, 
 
 **Independent Test**: Change the SMTP host/credentials through the panel, trigger a test send, and confirm the next report email uses the new settings without a restart (spec.md US3).
 
-- [ ] T016 [P] [US3] Implement `GET /smtp`, `POST /smtp/test`, and `POST /smtp` in `src/panel/routes/smtp.js` + `src/panel/views/smtp.html`: test-send via `nodemailer` (reusing the construction pattern from `src/reporte-diario.js`) before persisting; `SMTP_PASS` masked by default (FR-009, FR-012)
-- [ ] T017 [P] [US3] Implement `GET /actual` and `POST /actual` in `src/panel/routes/actual.js` + `src/panel/views/actual.html`: validate via `src/actual.js`'s existing `open()`/`close()` handshake before persisting; `ACTUAL_PASSWORD` masked by default (FR-010, FR-012)
-- [ ] T018 [P] [US3] Implement `GET /recipients` and `POST /recipients` in `src/panel/routes/recipients.js` + `src/panel/views/recipients.html`: require at least one syntactically valid email address in `NOTIFICATION_EMAIL` before persisting (FR-011)
-- [ ] T019 [US3] Extend `POST /reveal/:field` (T013) to also cover the SMTP password and Actual password fields (FR-012) — depends on T013, T016, T017
-- [ ] T020 [US3] Register the SMTP/Actual/Recipients section links in `src/panel/routes/dashboard.js` — depends on T009, T016, T017, T018
+- [X] T016 [P] [US3] Implement `GET /smtp`, `POST /smtp/test`, and `POST /smtp` in `src/panel/routes/smtp.js` + `src/panel/views/smtp.html`: test-send via `nodemailer` (reusing the construction pattern from `src/reporte-diario.js`) before persisting; `SMTP_PASS` masked by default (FR-009, FR-012)
+- [X] T017 [P] [US3] Implement `GET /actual` and `POST /actual` in `src/panel/routes/actual.js` + `src/panel/views/actual.html`: validate via `src/actual.js`'s existing `open()`/`close()` handshake before persisting; `ACTUAL_PASSWORD` masked by default (FR-010, FR-012)
+- [X] T018 [P] [US3] Implement `GET /recipients` and `POST /recipients` in `src/panel/routes/recipients.js` + `src/panel/views/recipients.html`: require at least one syntactically valid email address in `NOTIFICATION_EMAIL` before persisting (FR-011)
+- [X] T019 [US3] Extend `POST /reveal/:field` (T013) to also cover the SMTP password and Actual password fields (FR-012) — depends on T013, T016, T017
+- [X] T020 [US3] Register the SMTP/Actual/Recipients section links in `src/panel/routes/dashboard.js` — depends on T009, T016, T017, T018
 
 **Checkpoint**: All of User Stories 1, 2, and 3 should now be independently functional.
 

@@ -10,6 +10,8 @@ const { envGet } = require('../config-store');
 
 const REVEALABLE_FIELDS = {
   'telegram-bot-token': 'TELEGRAM_BOT_TOKEN',
+  'smtp-password': 'SMTP_PASS',
+  'actual-password': 'ACTUAL_PASSWORD',
 };
 
 function register(router, ctx) {

@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>SMTP settings — actual-notifier panel</title></head>
+<body>
+<h1>SMTP settings</h1>
+{{errorHtml}}
+{{noticeHtml}}
+<form method="post" action="/smtp">
+  <label>Host <input type="text" name="smtp_host" value="{{host}}" required></label><br>
+  <label>Port <input type="number" name="smtp_port" value="{{port}}" min="1" max="65535" required></label><br>
+  <label><input type="checkbox" name="smtp_secure" {{secureChecked}}> Use TLS (secure)</label><br>
+  <label>User <input type="text" name="smtp_user" value="{{user}}" required></label><br>
+  <p>
+    Current password: <span id="masked-pass">{{maskedPass}}</span>
+    <button type="button" id="reveal-btn">Show</button>
+  </p>
+  <label>New password (leave blank to keep current)
+    <input type="password" name="smtp_pass" autocomplete="off" placeholder="(unchanged)">
+  </label><br>
+  <button type="submit" formaction="/smtp/test">Send test email</button>
+  <button type="submit" formaction="/smtp">Save</button>
+</form>
+<p><a href="/">Back to dashboard</a></p>
+<script>
+  document.getElementById('reveal-btn').addEventListener('click', function () {
+    fetch('/reveal/smtp-password', { method: 'POST' })
+      .then(function (res) { return res.ok ? res.text() : Promise.reject(new Error('reveal failed')); })
+      .then(function (text) {
+        document.getElementById('masked-pass').textContent = text || '(not set)';
+      })
+      .catch(function () {
+        document.getElementById('masked-pass').textContent = '(failed to reveal)';
+      });
+  });
+</script>
+</body>
+</html>
