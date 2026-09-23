@@ -82,6 +82,24 @@ function envSetMany(pairs, filePath = envPath()) {
   writeLines(filePath, next, trailingNewline);
 }
 
+// --- crontab.txt (single-line schedule file; research.md mtime-watcher) ---
+
+const CRONTAB_PATH_DEFAULT = '/app/crontab.txt';
+
+function cronPath() {
+  return process.env.PANEL_CRONTAB_PATH || CRONTAB_PATH_DEFAULT;
+}
+
+/** Read crontab.txt's raw content verbatim (empty string if the file is missing). */
+function cronRead(filePath = cronPath()) {
+  return fs.existsSync(filePath) ? fs.readFileSync(filePath, 'utf8') : '';
+}
+
+/** Overwrite crontab.txt's content verbatim; entrypoint.sh's mtime-watcher reinstalls it. */
+function cronWrite(content, filePath = cronPath()) {
+  fs.writeFileSync(filePath, content, 'utf8');
+}
+
 // --- kv wrappers (thin pass-through to src/store.js's existing kv table) ---
 
 const { kvGet, kvSet } = require('../store');
@@ -90,6 +108,9 @@ module.exports = {
   envGet,
   envSet,
   envSetMany,
+  cronPath,
+  cronRead,
+  cronWrite,
   kvGet,
   kvSet,
 };

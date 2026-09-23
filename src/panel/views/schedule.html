@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Report schedule — actual-notifier panel</title></head>
+<body>
+<h1>Report schedule</h1>
+{{errorHtml}}
+{{rawNoticeHtml}}
+<form method="post" action="/schedule">
+  <p>
+    <label><input type="radio" name="mode" value="every-minutes" {{everyMinutesChecked}}> Every
+      <input type="number" name="minutes" min="1" max="59" value="{{minutesValue}}"> minutes</label>
+  </p>
+  <p>
+    <label><input type="radio" name="mode" value="every-hours" {{everyHoursChecked}}> Every
+      <input type="number" name="hours" min="1" max="23" value="{{hoursValue}}"> hours</label>
+  </p>
+  <p>
+    <label><input type="radio" name="mode" value="daily-at" {{dailyAtChecked}}> Once a day at
+      <input type="time" name="time" value="{{timeValue}}"></label>
+  </p>
+  <button type="submit">Save</button>
+</form>
+<p><a href="/">Back to dashboard</a></p>
+</body>
+</html>

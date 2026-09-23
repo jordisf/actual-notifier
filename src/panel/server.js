@@ -179,6 +179,7 @@ function createServer(db) {
   require('./routes/smtp').register(router, ctx);
   require('./routes/actual').register(router, ctx);
   require('./routes/recipients').register(router, ctx);
+  require('./routes/schedule').register(router, ctx);
   require('./routes/reveal').register(router, ctx);
 
   const server = http.createServer(async (req, res) => {

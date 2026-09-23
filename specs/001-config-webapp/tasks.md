@@ -101,10 +101,10 @@ Single project (per plan.md). New code lives under `src/panel/` (own container, 
 
 **Independent Test**: Pick each of the three schedule modes in the panel and confirm the report runs at the expected cadence without a restart (spec.md US4).
 
-- [ ] T021 [US4] Add the schedule mtime-watch loop to `entrypoint.sh`: poll `crontab.txt`'s mtime on an interval and re-run `crontab /app/crontab.txt` when it changes, so `notifier-cron` never needs a restart for schedule edits (research.md)
-- [ ] T022 [P] [US4] Implement `GET /schedule` in `src/panel/routes/schedule.js` + `src/panel/views/schedule.html`: parse the current single cron line in `crontab.txt` back into one of exactly three modes — `every-minutes`, `every-hours`, `daily-at` — for display (data-model.md Report Schedule; FR-013)
-- [ ] T023 [US4] Implement `POST /schedule`: translate the selected mode + its single parameter (`minutes`, `hours`, or `time` HH:MM) into exactly one valid cron line and write it to the shared `crontab.txt` (FR-013, FR-014) — depends on T021, T022
-- [ ] T024 [US4] Register the Schedule section link in `src/panel/routes/dashboard.js` — depends on T009, T022
+- [X] T021 [US4] Add the schedule mtime-watch loop to `entrypoint.sh`: poll `crontab.txt`'s mtime on an interval and re-run `crontab /app/crontab.txt` when it changes, so `notifier-cron` never needs a restart for schedule edits (research.md)
+- [X] T022 [P] [US4] Implement `GET /schedule` in `src/panel/routes/schedule.js` + `src/panel/views/schedule.html`: parse the current single cron line in `crontab.txt` back into one of exactly three modes — `every-minutes`, `every-hours`, `daily-at` — for display (data-model.md Report Schedule; FR-013)
+- [X] T023 [US4] Implement `POST /schedule`: translate the selected mode + its single parameter (`minutes`, `hours`, or `time` HH:MM) into exactly one valid cron line and write it to the shared `crontab.txt` (FR-013, FR-014) — depends on T021, T022
+- [X] T024 [US4] Register the Schedule section link in `src/panel/routes/dashboard.js` — depends on T009, T022
 
 **Checkpoint**: All four user stories should now be independently functional.
 
