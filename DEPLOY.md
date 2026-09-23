@@ -25,10 +25,11 @@ git pull --ff-only
 docker compose up -d
 
 # 3. Post-check
-docker compose ps                      # both services Up, no restart loop
+docker compose ps                      # all services Up, no restart loop
 docker exec actual_notifier node --check /app/src/reporte-diario.js
 docker logs actual_notifier --tail 10
 docker logs notifier_listener --tail 10
+docker logs actual_notifier_panel --tail 10
 ```
 
 If `Dockerfile` / `package.json` changed:
@@ -60,6 +61,25 @@ category allow-list test pass an extra `-e "TELEGRAM_CATEGORIES=Renta,..."`.)
    (`docker network ls | grep actual_net`) and that the Actual container is
    reachable: `docker exec actual_notifier node -e "fetch('http://actual-budget:5006/api/version').then(r=>console.log(r.status))"`.
 
+## Config panel (config-panel)
+
+- Served on `127.0.0.1:${PANEL_PORT:-8080}` by default. Reach it via SSH
+  tunnel: `ssh -L 8080:127.0.0.1:8080 <lxc>`, then open
+  `http://127.0.0.1:8080` in a browser.
+- To expose it on the LAN instead: set `PANEL_BIND_HOST=0.0.0.0` in the
+  environment and keep the LXC firewall / network ACLs so only LAN or VPN
+  can reach that port. **Never expose it to the internet.**
+- First boot: open the panel once — the login form is in bootstrap mode
+  (no password). Set the username (default `admin`) and a strong password.
+  This can only happen **once**; the bootstrap flag is gone after the first
+  password is stored in `data/notifier.db` (kv table).
+- The panel writes `./.env` and `./crontab.txt` on the host (mounted
+  `:rw` into the panel only; the other services keep `:ro` mounts).
+  `notifier-cron` picks up `.env` on its next run, the crontab is
+  re-installed by the mtime watcher in `entrypoint.sh` (~10s), and
+  `notifier-listener` reloads the four `TELEGRAM_*` values on every poll —
+  **no container restarts needed** for any panel edit.
+
 ## Gotchas (learned the hard way)
 
 - **First upgrade from the old single-service compose (one-time conflict).**
@@ -88,6 +108,17 @@ category allow-list test pass an extra `-e "TELEGRAM_CATEGORIES=Renta,..."`.)
 - **Prod credentials (WARNING #1 from SDD verify):** bot token and SMTP
   password must be rotated if they were ever shared with the dev environment
   before the dev-bot separation.
+- **Config panel reachability is operator-managed.** Compose only defaults
+  the bind to 127.0.0.1 (fail-closed). If you set `PANEL_BIND_HOST=0.0.0.0`,
+  the LAN/VPN-only restriction is **your** responsibility (firewall/ACL);
+  the panel itself has no network filtering.
+- **Panel password reset (no recovery UI).** To force the bootstrap flow
+  again, delete the hash while the panel is down:
+  ```bash
+  docker stop actual_notifier_panel
+  docker exec actual_notifier node -e "const s=require('/app/src/store');const db=s.open();s.kvSet(db,'panel_password_hash',null);db.close()"
+  docker start actual_notifier_panel
+  ```
 
 ## Rollback
 

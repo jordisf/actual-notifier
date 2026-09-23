@@ -96,6 +96,48 @@ docker compose exec actual_notifier node src/reporte-diario.js
 
 ---
 
+## Panel de configuración web (`config-panel`)
+
+Un panel web autogestionado (sin dependencias nuevas) permite gestionar **toda la configuración desde el navegador**, sin SSH ni reinicio de contenedores:
+
+| Sección | Qué configura |
+|---|---|
+| **Telegram** | Token del bot, grupo, categorías, timeout de long-poll. Si guardas un token en blanco, se conserva el actual. |
+| **SMTP** | Host, puerto, TLS, credenciales + botón de *test mail* antes de guardar. |
+| **Actual Budget** | URL, sync ID y contraseña + prueba de handshake real antes de guardar. |
+| **Destinatarios** | Lista de emails del reporte (se normaliza y dedupla). |
+| **Planificación** | Los tres modos de cron (`cada N minutos` / `cada N horas` / `diario a HH:MM`) con vista solo-lectura de la línea resultante. |
+
+### Acceso
+
+- **Dirección:** `http://<host>:8080` (por defecto `http://127.0.0.1:8080`).
+- **Exposición LAN/VPN:** el puerto se publica en `${PANEL_BIND_HOST:-127.0.0.1}`. La **restricción a LAN/VPN es responsabilidad del operador**: mantén el valor por defecto (solo localhost, acceso vía túnel/SSH) o, si lo abres a tu red, asegúrate de que `config-panel` **solo sea alcanzable desde LAN o VPN** — nunca desde internet. En la red pública no debe existir.
+
+```bash
+# Ejemplo: habilitar acceso desde la LAN (solo si tu red es de confianza)
+PANEL_BIND_HOST=0.0.0.0 docker compose up -d config-panel
+```
+
+### Primer arranque (bootstrap de contraseña)
+
+La primera vez no existe contraseña: el login entra sin credenciales y **fuerza** la creación de una en `/set-password` (usuario por defecto `admin`, cambiante). Solo se puede hacer **una** vez; si más tarde necesitas reiniciarla, elimina la clave en `data/notifier.db` (tabla `kv`, `panel_password_hash`).
+
+### Aplicación sin reinicios
+
+- **Cron / planificación:** `entrypoint.sh` vigila el mtime de `crontab.txt` y re-vuelca la crontab (~10 s) — sin reiniciar `notifier-cron`.
+- **Listener de Telegram:** `src/listener.js` recarga a cada poll los 4 valores Telegram de `.env` (`TELEGRAM_BOT_TOKEN`, `TELEGRAM_GROUP_ID`, `TELEGRAM_CATEGORIES`, `TELEGRAM_POLL_TIMEOUT`) — sin reiniciar `notifier-listener`.
+- **Cron y reporte:** leen `.env` en cada ejecución, por lo que los cambios de SMTP/Actual/destinatarios valen desde el próximo run.
+
+> ⚠️ Cambiar **el token por un bot distinto** (rotación) sigue requiriendo el reseteo de `poll_offset` documentado en [DEPLOY.md](DEPLOY.md).
+
+### Logs del panel
+
+```bash
+docker logs actual_notifier_panel --tail 50
+```
+
+---
+
 ## Desarrollo local
 
 1. Instala las dependencias:
@@ -177,10 +219,12 @@ actual-notifier/
 ├── crontab.txt          # Planificación cron (20:00 diario)
 ├── docker-compose.yml   # Servicio, volúmenes y red
 ├── Dockerfile           # Imagen basada en node:20-slim
-├── entrypoint.sh        # Vuelca entorno, instala crontab y arranca cron
+├── Dockerfile.panel     # Imagen del panel de configuración (multi-stage)
+├── entrypoint.sh        # Vuelca entorno, instala crontab, vigila crontab, arranca cron
 ├── package.json
 └── src/
-    └── reporte-diario.js  # Lógica del reporte
+    ├── listener.js      # Listener long-poll de Telegram (recarga .env en cada poll)
+    └── panel/           # Panel web de configuración (auth, rutas, vistas)
 ```
 
 ---
