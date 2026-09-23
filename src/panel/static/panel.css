@@ -1,0 +1,178 @@
+/*
+ * actual-notifier panel — minimal, dependency-free stylesheet (FR-001/FR-002).
+ *
+ * Hand-written CSS with no external assets, framework, or web fonts
+ * (FR-002). Served at GET /static/panel.css — a session-guarded static
+ * route in src/panel/server.js. Scope: the panel's 6 authenticated
+ * section pages plus the login / set-password auth pages.
+ *
+ * Conventions shared with the templates (see src/panel/layout.js):
+ *   .card  one bordered block per page's main content
+ *   .error validation error line (replaces <p style="color:red">)
+ *   .auth  centered container for the auth pages (no nav, no footer)
+ */
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  font-size: 15px;
+  line-height: 1.5;
+  color: #1a1a1a;
+  background: #f4f4f6;
+}
+
+.panel {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 1.5rem 1rem 3rem;
+}
+
+.panel-header h1 {
+  margin: 0 0 0.25rem;
+  font-size: 1.5rem;
+  font-weight: 600;
+}
+
+.panel-header .user {
+  color: #555;
+  font-size: 0.95rem;
+}
+
+.card {
+  margin-top: 1rem;
+  padding: 1.25rem 1.5rem;
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+}
+
+.card h1 {
+  margin-top: 0;
+  font-size: 1.25rem;
+  font-weight: 600;
+}
+
+.error { color: #b91c1c; margin: 0.5rem 0; }
+.notice { color: #15803d; margin: 0.5rem 0; }
+
+/* --- navigation ----------------------------------------------------------------- */
+
+.nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  margin: 1rem 0;
+}
+
+.nav a {
+  padding: 0.4rem 0.85rem;
+  border-radius: 4px;
+  color: #1a1a1a;
+  text-decoration: none;
+  border: 1px solid transparent;
+}
+
+.nav a:hover {
+  background: #e6e6ea;
+}
+
+.nav a.active {
+  background: #1a1a1a;
+  color: #fff;
+}
+
+/* --- forms ---------------------------------------------------------------------- */
+
+form label {
+  display: block;
+  margin: 0.65rem 0;
+}
+
+form input[type="text"],
+form input[type="password"],
+form input[type="number"],
+form input[type="time"] {
+  display: inline-block;
+  min-width: 260px;
+  max-width: 100%;
+  margin-left: 0.5rem;
+  padding: 0.35rem 0.5rem;
+  font: inherit;
+  border: 1px solid #bbb;
+  border-radius: 4px;
+}
+
+form input[type="checkbox"],
+form input[type="radio"] {
+  margin-right: 0.35rem;
+}
+
+.actions {
+  margin-top: 1rem;
+}
+
+form button,
+.actions button {
+  margin-right: 0.5rem;
+  padding: 0.4rem 1rem;
+  font: inherit;
+  border: 1px solid #1a1a1a;
+  border-radius: 4px;
+  background: #1a1a1a;
+  color: #fff;
+  cursor: pointer;
+}
+
+form button:hover,
+.actions button:hover {
+  background: #000;
+}
+
+/* --- auth pages (login / set-password) ------------------------------------------ */
+
+.auth {
+  max-width: 32rem;
+  margin: 4rem auto 0;
+}
+
+.auth .card {
+  margin-top: 2rem;
+}
+
+/* --- footer --------------------------------------------------------------------- */
+
+.panel-footer {
+  margin-top: 1.5rem;
+  font-size: 0.9rem;
+  color: #555;
+}
+
+.panel-footer form {
+  display: inline;
+  margin-left: 1rem;
+}
+
+.panel-footer a {
+  color: #1a56b0;
+}
+
+/* --- responsive tolerance (not a mobile requirement, FR-002) --------------------- */
+
+@media (max-width: 720px) {
+  .panel { padding: 1rem 0.75rem 2.5rem; }
+  .nav { flex-direction: column; }
+  .nav a { display: block; text-align: center; }
+  form input[type="text"],
+  form input[type="password"],
+  form input[type="number"],
+  form input[type="time"] {
+    display: block;
+    min-width: 0;
+    width: 100%;
+    max-width: 100%;
+    margin: 0.25rem 0 0;
+  }
+  .auth { margin-top: 1.5rem; }
+}

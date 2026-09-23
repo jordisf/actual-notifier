@@ -11,6 +11,8 @@
 
 const http = require('http');
 const crypto = require('crypto');
+const fs = require('fs');
+const path = require('path');
 const { URL } = require('url');
 const querystring = require('querystring');
 
@@ -181,6 +183,20 @@ function createServer(db) {
   require('./routes/recipients').register(router, ctx);
   require('./routes/schedule').register(router, ctx);
   require('./routes/reveal').register(router, ctx);
+
+  // Panel stylesheet — served session-guarded (contracts/routes.md).
+  const cssPath = path.join(__dirname, 'static', 'panel.css');
+  router.get('/static/panel.css', (req, res) => {
+    requireSession(req, res, (req2, res2) => {
+      const css = fs.readFileSync(cssPath, 'utf8');
+      res2.writeHead(200, {
+        'Content-Type': 'text/css; charset=utf-8',
+        'Cache-Control': 'no-store',
+        'Content-Length': Buffer.byteLength(css),
+      });
+      res2.end(css);
+    });
+  });
 
   const server = http.createServer(async (req, res) => {
     const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
