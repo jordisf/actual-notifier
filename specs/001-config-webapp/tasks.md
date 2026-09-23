@@ -114,9 +114,9 @@ Single project (per plan.md). New code lives under `src/panel/` (own container, 
 
 **Purpose**: Improvements that affect multiple user stories
 
-- [ ] T025 [P] Security hardening pass across `src/panel/`: confirm no secret (password, bot token, session secret) is ever written to a log line (`src/log.js` calls) or included in any HTTP response outside the explicit `POST /reveal/:field` action (FR-002, FR-012)
-- [ ] T026 [P] Update `README.md` and `DEPLOY.md`: document the new `config-panel` service, its LAN/VPN-only exposure requirement, and the first-boot bootstrap-password flow
-- [ ] T027 Run `quickstart.md` validation end-to-end (all 5 scenarios: bootstrap login, Telegram live-reload, SMTP test-before-save, schedule live-reload, LAN/VPN-only reachability)
+- [X] T025 [P] Security hardening pass across `src/panel/`: confirm no secret (password, bot token, session secret) is ever written to a log line (`src/log.js` calls) or included in any HTTP response outside the explicit `POST /reveal/:field` action (FR-002, FR-012)
+- [X] T026 [P] Update `README.md` and `DEPLOY.md`: document the new `config-panel` service, its LAN/VPN-only exposure requirement, and the first-boot bootstrap-password flow
+- [X] T027 Run `quickstart.md` validation end-to-end (all 5 scenarios: bootstrap login, Telegram live-reload, SMTP test-before-save, schedule live-reload, LAN/VPN-only reachability)
 
 ---
 
