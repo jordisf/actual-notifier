@@ -3,6 +3,7 @@
 .env.*
 !.env.example
 !.env.dev
+Telegram.md
 
 # Dependencias
 node_modules/
