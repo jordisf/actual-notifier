@@ -28,8 +28,8 @@ Single project (per plan.md). New code lives under `src/panel/` (own container, 
 
 **Purpose**: Project/container scaffolding for the panel
 
-- [ ] T001 Create panel project skeleton: `src/panel/server.js`, `src/panel/main.js`, `src/panel/config-store.js`, `src/panel/auth.js`, `src/panel/validate.js`, `src/panel/routes/` (empty dir for per-section route modules), `src/panel/views/` (empty dir for HTML templates), and `Dockerfile.panel` (node:20-slim base, `npm install --omit=dev`, copies `src/store.js`, `src/log.js`, `src/actual.js`, `src/telegram/bot.js`, `src/panel/`, `CMD ["node","src/panel/main.js"]`) — zero new npm dependencies (plan.md Constitution Check)
-- [ ] T002 [P] Add a `config-panel` service to `docker-compose.yml`: build from `Dockerfile.panel`, join `actual_net`, mount `./data:/app/data`, `./.env:/app/.env:rw`, `./crontab.txt:/app/crontab.txt:rw`; publish no host port beyond the operator's LAN/VPN-reachable interface (FR-005); leave `notifier-cron`'s existing `.env`/`crontab.txt` mounts as `:ro`, unchanged
+- [X] T001 Create panel project skeleton: `src/panel/server.js`, `src/panel/main.js`, `src/panel/config-store.js`, `src/panel/auth.js`, `src/panel/validate.js`, `src/panel/routes/` (empty dir for per-section route modules), `src/panel/views/` (empty dir for HTML templates), and `Dockerfile.panel` (node:20-slim base, `npm install --omit=dev`, copies `src/store.js`, `src/log.js`, `src/actual.js`, `src/telegram/bot.js`, `src/panel/`, `CMD ["node","src/panel/main.js"]`) — zero new npm dependencies (plan.md Constitution Check)
+- [X] T002 [P] Add a `config-panel` service to `docker-compose.yml`: build from `Dockerfile.panel`, join `actual_net`, mount `./data:/app/data`, `./.env:/app/.env:rw`, `./crontab.txt:/app/crontab.txt:rw`; publish no host port beyond the operator's LAN/VPN-reachable interface (FR-005); leave `notifier-cron`'s existing `.env`/`crontab.txt` mounts as `:ro`, unchanged
 
 ---
 
@@ -39,10 +39,10 @@ Single project (per plan.md). New code lives under `src/panel/` (own container, 
 
 **⚠️ CRITICAL**: No user story work can begin until this phase is complete
 
-- [ ] T003 [P] Implement `src/panel/config-store.js`: read/write individual `.env` key-value pairs (preserving unrelated lines/comments) and thin read/write wrappers over `src/store.js`'s existing `kv` table (data-model.md)
-- [ ] T004 [P] Implement `src/panel/auth.js`: `hashPassword()`/`verifyPassword()` via `crypto.scrypt` with a random salt, encoded `salt:hash` (data-model.md Panel Credentials — "never stored or logged in plain form"); `signSession()`/`verifySession()` via `crypto.createHmac` over `sessionId + expiryEpoch`, with a `panel_session_secret` generated once and persisted to `kv` on first boot
-- [ ] T005 Implement `src/panel/server.js`: `http.createServer` + a small path/method router + cookie parsing + a session-guard wrapper that redirects unauthenticated/expired-session requests to `/login` (contracts/routes.md: "All Session-gated routes redirect to /login when the session cookie is missing, invalid, or expired") — depends on T004
-- [ ] T006 Wire `src/panel/main.js`: opens the shared SQLite store (`src/store.js`), starts the HTTP server from T005, logs startup via `src/log.js` with `service: 'panel'` — depends on T005
+- [X] T003 [P] Implement `src/panel/config-store.js`: read/write individual `.env` key-value pairs (preserving unrelated lines/comments) and thin read/write wrappers over `src/store.js`'s existing `kv` table (data-model.md)
+- [X] T004 [P] Implement `src/panel/auth.js`: `hashPassword()`/`verifyPassword()` via `crypto.scrypt` with a random salt, encoded `salt:hash` (data-model.md Panel Credentials — "never stored or logged in plain form"); `signSession()`/`verifySession()` via `crypto.createHmac` over `sessionId + expiryEpoch`, with a `panel_session_secret` generated once and persisted to `kv` on first boot
+- [X] T005 Implement `src/panel/server.js`: `http.createServer` + a small path/method router + cookie parsing + a session-guard wrapper that redirects unauthenticated/expired-session requests to `/login` (contracts/routes.md: "All Session-gated routes redirect to /login when the session cookie is missing, invalid, or expired") — depends on T004
+- [X] T006 Wire `src/panel/main.js`: opens the shared SQLite store (`src/store.js`), starts the HTTP server from T005, logs startup via `src/log.js` with `service: 'panel'` — depends on T005
 
 **Checkpoint**: Foundation ready - user story implementation can now begin
 
@@ -54,10 +54,10 @@ Single project (per plan.md). New code lives under `src/panel/` (own container, 
 
 **Independent Test**: Deploy with no `panel_password_hash` set, confirm the first login succeeds without a password and forces password creation, then confirm a second login requires the new password (spec.md US1).
 
-- [ ] T007 [P] [US1] Implement `GET /login` and `POST /login` in `src/panel/routes/login.js`: render the bootstrap notice (no password field) when `panel_password_hash` (kv, via T003) is empty, otherwise render the normal form; on `POST`, verify credentials or accept the one-time bootstrap login, issue a signed session cookie (T004) on success, and enforce lockout using `panel_login_failures`/`panel_lockout_until` kv rows (FR-003, FR-015; data-model.md)
-- [ ] T008 [US1] Implement `GET /set-password`, `POST /set-password`, and `POST /logout` in `src/panel/routes/login.js`: `/set-password` is reachable mid-bootstrap-session and persists a new `panel_username`/`panel_password_hash` via `config-store.js` (T003) before any other route becomes usable (FR-003, FR-004); `/logout` clears the session cookie — depends on T007
-- [ ] T009 [P] [US1] Implement `GET /` dashboard shell in `src/panel/routes/dashboard.js` + `src/panel/views/dashboard.html`: static links to Telegram/SMTP/Actual/Recipients/Schedule sections (placeholders, wired progressively by later stories)
-- [ ] T010 [US1] Add structured logging for login success, login failure, and lockout events in `src/panel/routes/login.js` (`src/log.js`, `service: 'panel'`) — depends on T007, T008
+- [X] T007 [P] [US1] Implement `GET /login` and `POST /login` in `src/panel/routes/login.js`: render the bootstrap notice (no password field) when `panel_password_hash` (kv, via T003) is empty, otherwise render the normal form; on `POST`, verify credentials or accept the one-time bootstrap login, issue a signed session cookie (T004) on success, and enforce lockout using `panel_login_failures`/`panel_lockout_until` kv rows (FR-003, FR-015; data-model.md)
+- [X] T008 [US1] Implement `GET /set-password`, `POST /set-password`, and `POST /logout` in `src/panel/routes/login.js`: `/set-password` is reachable mid-bootstrap-session and persists a new `panel_username`/`panel_password_hash` via `config-store.js` (T003) before any other route becomes usable (FR-003, FR-004); `/logout` clears the session cookie — depends on T007
+- [X] T009 [P] [US1] Implement `GET /` dashboard shell in `src/panel/routes/dashboard.js` + `src/panel/views/dashboard.html`: static links to Telegram/SMTP/Actual/Recipients/Schedule sections (placeholders, wired progressively by later stories)
+- [X] T010 [US1] Add structured logging for login success, login failure, and lockout events in `src/panel/routes/login.js` (`src/log.js`, `service: 'panel'`) — depends on T007, T008
 
 **Checkpoint**: At this point, User Story 1 should be fully functional and testable independently — a locked panel with a working bootstrap flow, login/logout, and a dashboard shell.
 

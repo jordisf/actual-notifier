@@ -1,0 +1,15 @@
+FROM node:20-slim
+
+# Same base + install pattern as the existing Dockerfile (notifier-cron/listener),
+# but a lean image: no cron/tzdata, and only the source files the panel needs.
+
+WORKDIR /app
+
+COPY package*.json ./
+RUN npm install --omit=dev
+
+COPY src/store.js src/log.js src/actual.js ./src/
+COPY src/telegram/bot.js ./src/telegram/bot.js
+COPY src/panel/ ./src/panel/
+
+CMD ["node", "src/panel/main.js"]

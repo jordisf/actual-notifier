@@ -45,6 +45,31 @@ services:
       fi
       exec node /app/src/listener.js'
 
+  # Web configuration panel (specs/001-config-webapp): its own image
+  # (Dockerfile.panel), bakes in only the files it needs — not the
+  # `./src:/app/src:ro` bind mount the other two services use. `.env` and
+  # `crontab.txt` are mounted `:rw` (unlike the other services' `:ro`
+  # mounts, left unchanged above) so the panel can persist edits. No
+  # published port beyond PANEL_BIND_HOST — defaults to 127.0.0.1 so an
+  # accidental omission fails closed to localhost-only (FR-005).
+  config-panel:
+    build:
+      context: .
+      dockerfile: Dockerfile.panel
+    container_name: actual_notifier_panel
+    restart: unless-stopped
+    environment:
+      TZ: Europe/Madrid
+      PANEL_PORT: ${PANEL_PORT:-8080}
+    volumes:
+      - ./data:/app/data
+      - ./.env:/app/.env:rw
+      - ./crontab.txt:/app/crontab.txt:rw
+    ports:
+      - "${PANEL_BIND_HOST:-127.0.0.1}:${PANEL_PORT:-8080}:${PANEL_PORT:-8080}"
+    networks:
+      - actual_net
+
 networks:
   actual_net:
     external: true

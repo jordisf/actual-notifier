@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>actual-notifier panel</title></head>
+<body>
+<h1>actual-notifier configuration panel</h1>
+<p>Logged in as {{username}}</p>
+<ul>
+  <li><a href="/telegram">Telegram</a></li>
+  <li><a href="/smtp">SMTP</a></li>
+  <li><a href="/actual">Actual Budget</a></li>
+  <li><a href="/recipients">Recipients</a></li>
+  <li><a href="/schedule">Schedule</a></li>
+</ul>
+<p><a href="/set-password">Change password</a></p>
+<form method="post" action="/logout">
+  <button type="submit">Log out</button>
+</form>
+</body>
+</html>
