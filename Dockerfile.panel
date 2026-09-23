@@ -1,12 +1,27 @@
+FROM node:20-slim AS build
+
+# Stage 1: compile native deps (better-sqlite3) with a build toolchain.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3 \
+    make \
+    g++ \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+COPY package*.json ./
+RUN npm install --omit=dev
+
+# Stage 2: lean runtime image, no build toolchain.
 FROM node:20-slim
 
 # Same base + install pattern as the existing Dockerfile (notifier-cron/listener),
 # but a lean image: no cron/tzdata, and only the source files the panel needs.
+# node_modules come from the build stage (better-sqlite3 pre-compiled).
 
 WORKDIR /app
 
+COPY --from=build /app/node_modules ./node_modules
 COPY package*.json ./
-RUN npm install --omit=dev
 
 COPY src/store.js src/log.js src/actual.js ./src/
 COPY src/telegram/bot.js ./src/telegram/bot.js
