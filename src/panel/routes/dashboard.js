@@ -10,6 +10,7 @@ const fs = require('fs');
 const path = require('path');
 
 const { kvGet } = require('../config-store');
+const { renderPage } = require('../layout');
 
 const TEMPLATE_PATH = path.join(__dirname, '..', 'views', 'dashboard.html');
 
@@ -19,7 +20,8 @@ function escapeHtml(s) {
 
 function render(username) {
   const template = fs.readFileSync(TEMPLATE_PATH, 'utf8');
-  return template.replace('{{username}}', escapeHtml(username || '(unknown)'));
+  const body = template.replace('{{username}}', escapeHtml(username || '(unknown)'));
+  return renderPage({ title: 'Dashboard', active: 'dashboard', body });
 }
 
 function register(router, ctx) {

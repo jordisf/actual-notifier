@@ -13,6 +13,7 @@ const path = require('path');
 
 const { log } = require('../../log');
 const { envGet, envSetMany } = require('../config-store');
+const { renderPage } = require('../layout');
 
 const TEMPLATE_PATH = path.join(__dirname, '..', 'views', 'recipients.html');
 
@@ -29,10 +30,11 @@ function currentRecipients() {
 
 function render({ recipients, error }) {
   const template = fs.readFileSync(TEMPLATE_PATH, 'utf8');
-  const errorHtml = error ? `<p style="color:red">${escapeHtml(error)}</p>` : '';
-  return template
+  const errorHtml = error ? `<p class="error">${escapeHtml(error)}</p>` : '';
+  const body = template
     .replace('{{errorHtml}}', errorHtml)
     .replace('{{recipients}}', escapeHtml(recipients));
+  return renderPage({ title: 'Notification recipients', active: 'recipients', body });
 }
 
 function register(router, ctx) {

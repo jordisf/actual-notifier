@@ -14,6 +14,7 @@ const path = require('path');
 
 const { log } = require('../../log');
 const { envGet, envSetMany } = require('../config-store');
+const { renderPage } = require('../layout');
 const bot = require('../../telegram/bot');
 
 const TEMPLATE_PATH = path.join(__dirname, '..', 'views', 'telegram.html');
@@ -42,13 +43,14 @@ function currentSettings() {
 
 function render({ botToken, groupId, categories, pollTimeout, error }) {
   const template = fs.readFileSync(TEMPLATE_PATH, 'utf8');
-  const errorHtml = error ? `<p style="color:red">${escapeHtml(error)}</p>` : '';
-  return template
+  const errorHtml = error ? `<p class="error">${escapeHtml(error)}</p>` : '';
+  const body = template
     .replace('{{errorHtml}}', errorHtml)
     .replace('{{maskedToken}}', escapeHtml(maskSecret(botToken)))
     .replace('{{groupId}}', escapeHtml(groupId))
     .replace('{{categories}}', escapeHtml(categories))
     .replace('{{pollTimeout}}', escapeHtml(pollTimeout));
+  return renderPage({ title: 'Telegram settings', active: 'telegram', body });
 }
 
 /**

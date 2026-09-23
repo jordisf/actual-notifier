@@ -18,6 +18,7 @@ const nodemailer = require('nodemailer');
 
 const { log } = require('../../log');
 const { envGet, envSetMany } = require('../config-store');
+const { renderPage } = require('../layout');
 
 const TEMPLATE_PATH = path.join(__dirname, '..', 'views', 'smtp.html');
 
@@ -48,9 +49,9 @@ function currentSettings() {
 
 function render({ host, port, secure, user, pass, error, notice }) {
   const template = fs.readFileSync(TEMPLATE_PATH, 'utf8');
-  const errorHtml = error ? `<p style="color:red">${escapeHtml(error)}</p>` : '';
-  const noticeHtml = notice ? `<p style="color:green">${escapeHtml(notice)}</p>` : '';
-  return template
+  const errorHtml = error ? `<p class="error">${escapeHtml(error)}</p>` : '';
+  const noticeHtml = notice ? `<p class="notice">${escapeHtml(notice)}</p>` : '';
+  const body = template
     .replace('{{errorHtml}}', errorHtml)
     .replace('{{noticeHtml}}', noticeHtml)
     .replace('{{host}}', escapeHtml(host))
@@ -58,6 +59,7 @@ function render({ host, port, secure, user, pass, error, notice }) {
     .replace('{{secureChecked}}', secure ? 'checked' : '')
     .replace('{{user}}', escapeHtml(user))
     .replace('{{maskedPass}}', escapeHtml(maskSecret(pass)));
+  return renderPage({ title: 'SMTP settings', active: 'smtp', body });
 }
 
 /** Parse submitted form fields; blank password = keep the currently stored one. */

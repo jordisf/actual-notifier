@@ -27,6 +27,7 @@ const crypto = require('crypto');
 
 const { log } = require('../../log');
 const { envGet, envSetMany } = require('../config-store');
+const { renderPage } = require('../layout');
 const actual = require('../../actual');
 
 const TEMPLATE_PATH = path.join(__dirname, '..', 'views', 'actual.html');
@@ -51,12 +52,13 @@ function currentSettings() {
 
 function render({ serverUrl, syncId, password, error }) {
   const template = fs.readFileSync(TEMPLATE_PATH, 'utf8');
-  const errorHtml = error ? `<p style="color:red">${escapeHtml(error)}</p>` : '';
-  return template
+  const errorHtml = error ? `<p class="error">${escapeHtml(error)}</p>` : '';
+  const body = template
     .replace('{{errorHtml}}', errorHtml)
     .replace('{{serverUrl}}', escapeHtml(serverUrl))
     .replace('{{syncId}}', escapeHtml(syncId))
     .replace('{{maskedPassword}}', escapeHtml(maskSecret(password)));
+  return renderPage({ title: 'Actual Budget connection', active: 'actual', body });
 }
 
 /**

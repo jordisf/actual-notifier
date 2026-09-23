@@ -11,6 +11,7 @@
 
 const { log } = require('../../log');
 const { kvGet, kvSet } = require('../config-store');
+const { renderAuthPage } = require('../layout');
 const auth = require('../auth');
 
 const LOCKOUT_THRESHOLD = 5;
@@ -20,54 +21,50 @@ function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 
-function layout(title, body) {
-  return `<!doctype html>
-<html lang="en">
-<head><meta charset="utf-8"><title>${escapeHtml(title)}</title></head>
-<body>
-${body}
-</body>
-</html>`;
-}
-
 function renderLoginForm({ bootstrap, error }) {
-  const errorHtml = error ? `<p style="color:red">${escapeHtml(error)}</p>` : '';
+  const errorHtml = error ? `<p class="error">${escapeHtml(error)}</p>` : '';
   if (bootstrap) {
-    return layout(
-      'Panel login',
-      `<h1>Welcome</h1>
-<p>No password has been set yet. Click below to log in and set one now.</p>
-${errorHtml}
-<form method="post" action="/login">
-  <button type="submit">Log in</button>
-</form>`,
-    );
+    return renderAuthPage({
+      title: 'Panel login',
+      body: `<div class="card">
+  <h1>Welcome</h1>
+  <p>No password has been set yet. Click below to log in and set one now.</p>
+  ${errorHtml}
+  <form method="post" action="/login">
+    <div class="actions"><button type="submit">Log in</button></div>
+  </form>
+</div>`,
+    });
   }
-  return layout(
-    'Panel login',
-    `<h1>Log in</h1>
-${errorHtml}
-<form method="post" action="/login">
-  <label>Username <input type="text" name="username" autocomplete="username" required></label><br>
-  <label>Password <input type="password" name="password" autocomplete="current-password" required></label><br>
-  <button type="submit">Log in</button>
-</form>`,
-  );
+  return renderAuthPage({
+    title: 'Panel login',
+    body: `<div class="card">
+  <h1>Log in</h1>
+  ${errorHtml}
+  <form method="post" action="/login">
+    <label>Username <input type="text" name="username" autocomplete="username" required></label>
+    <label>Password <input type="password" name="password" autocomplete="current-password" required></label>
+    <div class="actions"><button type="submit">Log in</button></div>
+  </form>
+</div>`,
+  });
 }
 
 function renderSetPasswordForm({ currentUsername, error }) {
-  const errorHtml = error ? `<p style="color:red">${escapeHtml(error)}</p>` : '';
-  return layout(
-    'Set panel credentials',
-    `<h1>Set your username and password</h1>
-${errorHtml}
-<form method="post" action="/set-password">
-  <label>Username <input type="text" name="username" value="${escapeHtml(currentUsername || '')}" required></label><br>
-  <label>New password <input type="password" name="password" autocomplete="new-password" required></label><br>
-  <label>Confirm password <input type="password" name="confirm" autocomplete="new-password" required></label><br>
-  <button type="submit">Save</button>
-</form>`,
-  );
+  const errorHtml = error ? `<p class="error">${escapeHtml(error)}</p>` : '';
+  return renderAuthPage({
+    title: 'Set panel credentials',
+    body: `<div class="card">
+  <h1>Set your username and password</h1>
+  ${errorHtml}
+  <form method="post" action="/set-password">
+    <label>Username <input type="text" name="username" value="${escapeHtml(currentUsername || '')}" required></label>
+    <label>New password <input type="password" name="password" autocomplete="new-password" required></label>
+    <label>Confirm password <input type="password" name="confirm" autocomplete="new-password" required></label>
+    <div class="actions"><button type="submit">Save</button></div>
+  </form>
+</div>`,
+  });
 }
 
 function isLockedOut(db) {

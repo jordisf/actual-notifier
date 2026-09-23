@@ -1,4 +1,4 @@
-'use strict';
+﻿'use strict';
 
 /**
  * GET/POST /schedule (US4, FR-013/FR-014).
@@ -7,7 +7,7 @@
  * followed by the command. The panel only ever displays/edits the time
  * fields as one of three simplified modes (data-model.md Report Schedule);
  * the command suffix is preserved verbatim on every save. entrypoint.sh's
- * mtime-watcher (research.md) reinstalls the crontab after this write —
+ * mtime-watcher (research.md) reinstalls the crontab after this write â€”
  * no signal from the panel to the notifier-cron container is needed.
  */
 
@@ -16,6 +16,7 @@ const path = require('path');
 
 const { log } = require('../../log');
 const { cronRead, cronWrite } = require('../config-store');
+const { renderPage } = require('../layout');
 
 const TEMPLATE_PATH = path.join(__dirname, '..', 'views', 'schedule.html');
 
@@ -85,12 +86,12 @@ function currentSchedule() {
 
 function render({ mode, minutes, hours, time, rawLine, error }) {
   const template = fs.readFileSync(TEMPLATE_PATH, 'utf8');
-  const errorHtml = error ? `<p style="color:red">${escapeHtml(error)}</p>` : '';
+  const errorHtml = error ? `<p class="error">${escapeHtml(error)}</p>` : '';
   const rawNoticeHtml = mode === 'raw'
     ? `<p><strong>Current schedule (raw, not editable here):</strong> <code>${escapeHtml(rawLine || '')}</code></p>` +
       '<p>Saving from this panel will replace it with one of the three supported modes below.</p>'
     : '';
-  return template
+  const body = template
     .replace('{{errorHtml}}', errorHtml)
     .replace('{{rawNoticeHtml}}', rawNoticeHtml)
     .replace('{{everyMinutesChecked}}', mode === 'every-minutes' ? 'checked' : '')
@@ -99,6 +100,7 @@ function render({ mode, minutes, hours, time, rawLine, error }) {
     .replace('{{minutesValue}}', escapeHtml(minutes != null && minutes !== '' ? String(minutes) : ''))
     .replace('{{hoursValue}}', escapeHtml(hours != null && hours !== '' ? String(hours) : ''))
     .replace('{{timeValue}}', escapeHtml(time || ''));
+  return renderPage({ title: 'Report schedule', active: 'schedule', body });
 }
 
 function register(router, ctx) {

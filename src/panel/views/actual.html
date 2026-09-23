@@ -1,22 +1,19 @@
-<!doctype html>
-<html lang="en">
-<head><meta charset="utf-8"><title>Actual Budget connection — actual-notifier panel</title></head>
-<body>
-<h1>Actual Budget connection</h1>
-{{errorHtml}}
-<form method="post" action="/actual">
-  <label>Server URL <input type="text" name="server_url" value="{{serverUrl}}" required></label><br>
-  <label>Sync id <input type="text" name="sync_id" value="{{syncId}}" required></label><br>
-  <p>
-    Current password: <span id="masked-password">{{maskedPassword}}</span>
-    <button type="button" id="reveal-btn">Show</button>
-  </p>
-  <label>New password (leave blank to keep current)
-    <input type="password" name="password" autocomplete="off" placeholder="(unchanged)">
-  </label><br>
-  <button type="submit">Save (validates connection first)</button>
-</form>
-<p><a href="/">Back to dashboard</a></p>
+<div class="card">
+  <h1>Actual Budget connection</h1>
+  {{errorHtml}}
+  <form method="post" action="/actual">
+    <label>Server URL <input type="text" name="server_url" value="{{serverUrl}}" required></label>
+    <label>Sync id <input type="text" name="sync_id" value="{{syncId}}" required></label>
+    <p>
+      Current password: <span id="masked-password">{{maskedPassword}}</span>
+      <button type="button" id="reveal-btn">Show</button>
+    </p>
+    <label>New password (leave blank to keep current)
+      <input type="password" name="password" autocomplete="off" placeholder="(unchanged)">
+    </label>
+    <div class="actions"><button type="submit">Save (validates connection first)</button></div>
+  </form>
+</div>
 <script>
   document.getElementById('reveal-btn').addEventListener('click', function () {
     fetch('/reveal/actual-password', { method: 'POST' })
@@ -29,5 +26,3 @@
       });
   });
 </script>
-</body>
-</html>

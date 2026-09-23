@@ -28,6 +28,11 @@ const NAV_ITEMS = [
   { id: 'schedule', label: 'Schedule', href: '/schedule' },
 ];
 
+// Fixed brand name shown in the <header> of every authenticated page
+// (contracts/routes.md 2: "the panel name (single string)"). The page's
+// own <h1> stays inside <main> on each section fragment.
+const PANEL_NAME = 'actual-notifier config panel';
+
 function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
@@ -35,12 +40,11 @@ function escapeHtml(s) {
 /**
  * Full authenticated page shell.
  *
- * @param {string} title   page title — becomes `<h1>` and `<title>… — actual-notifier panel</title>`
+ * @param {string} title   page title — becomes the <title>… — actual-notifier panel</title>
  * @param {string} active  nav item id that is active ('' or null = none active)
  * @param {string} body    substituted HTML fragment (verbatim)
- * @param {string} [username] when given, the header shows "Logged in as …"
  */
-function renderPage({ title, active, body, username }) {
+function renderPage({ title, active, body }) {
   const nav = NAV_ITEMS.map((item) => {
     const isActive = item.id === active;
     const cls = isActive ? ' class="active"' : '';
@@ -48,15 +52,13 @@ function renderPage({ title, active, body, username }) {
     return `    <a href="${item.href}"${cls}${aria}>${item.label}</a>`;
   }).join('\n');
 
-  const userLine = username ? `\n    <p class="user">Logged in as ${escapeHtml(username)}</p>` : '';
-
   return `<!doctype html>
 <html lang="en">
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="stylesheet" href="/static/panel.css"><title>${escapeHtml(title)} — actual-notifier panel</title></head>
 <body>
 <div class="panel">
   <header class="panel-header">
-    <h1>${escapeHtml(title)}</h1>${userLine}
+    <span class="brand">${escapeHtml(PANEL_NAME)}</span>
   </header>
   <nav class="nav">
 ${nav}

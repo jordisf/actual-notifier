@@ -1,15 +1,10 @@
-<!doctype html>
-<html lang="en">
-<head><meta charset="utf-8"><title>Notification recipients — actual-notifier panel</title></head>
-<body>
-<h1>Notification recipients</h1>
-{{errorHtml}}
-<form method="post" action="/recipients">
-  <label>Recipient emails (comma-separated)
-    <input type="text" name="recipients" value="{{recipients}}" size="60" required>
-  </label><br>
-  <button type="submit">Save</button>
-</form>
-<p><a href="/">Back to dashboard</a></p>
-</body>
-</html>
+<div class="card">
+  <h1>Notification recipients</h1>
+  {{errorHtml}}
+  <form method="post" action="/recipients">
+    <label>Recipient emails (comma-separated)
+      <input type="text" name="recipients" value="{{recipients}}" size="60" required>
+    </label>
+    <div class="actions"><button type="submit">Save</button></div>
+  </form>
+</div>
