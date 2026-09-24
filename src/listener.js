@@ -302,6 +302,23 @@ function resetReportCmdState() {
   reportQueued = null;
 }
 
+/**
+ * Test hook for the on-demand pipeline: artificial delay (ms) injected at
+ * the start of each on-demand pipeline run, so the depth-1 queue behavior
+ * can be exercised deterministically. Zero in production.
+ */
+let reportPipelineTestDelayMs = 0;
+function setReportPipelineDelay(ms) {
+  reportPipelineTestDelayMs = Number(ms) || 0;
+}
+
+/** Internal: the artificial pipeline delay, consumed once per on-demand run. */
+async function maybeApplyPipelineDelay() {
+  if (reportPipelineTestDelayMs > 0) {
+    await new Promise((r) => setTimeout(r, reportPipelineTestDelayMs));
+  }
+}
+
 async function handleMessage(msg) {
   const text = (msg.text || '').trim();
   if (!REPORT_CMD_RE.test(text)) return; // free-form: ignore, no reply (FR-008)
@@ -343,9 +360,13 @@ async function handleMessage(msg) {
 
   const job = { msg, ackMessageId };
   if (!reportInFlight) {
+    // Leader: start the pipeline first so its own turn can resolve at the end
+    // of THIS job (not after the queue drains); the in-flight guard also
+    // drains any queued follow-ups.
+    const firstTurn = runOnDemandReport(job);
     reportInFlight = (async () => {
       try {
-        await runOnDemandReport(job);
+        await firstTurn;
         while (reportQueued) {
           const next = reportQueued;
           reportQueued = null;
@@ -362,12 +383,13 @@ async function handleMessage(msg) {
         reportInFlight = null;
       }
     })();
-    return;
+    return firstTurn;
   }
   // One already running: queue this one (depth 1) and wait for its turn.
-  await new Promise((resolve) => {
+  const jobDone = new Promise((resolve) => {
     reportQueued = { ...job, resolve };
   });
+  return jobDone;
 }
 
 /**
@@ -379,6 +401,8 @@ async function runOnDemandReport(job) {
   const { msg, ackMessageId } = job;
   const outcome = { tag: 'failed' };
   const chatId = String(msg.chat.id);
+  // Test hook: deterministic delay so the depth-1 queue behavior is observable.
+  await maybeApplyPipelineDelay();
   try {
     const handle = await actual.open();
     try {
@@ -565,7 +589,7 @@ async function main() {
   }
 }
 
-module.exports = { handleUpdate, main, setDb, resetReportCmdState };
+module.exports = { handleUpdate, main, setDb, resetReportCmdState, setReportPipelineDelay };
 
 if (require.main === module) {
   main().catch((err) => {

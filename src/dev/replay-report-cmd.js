@@ -40,7 +40,7 @@ const dotenv = require('dotenv');
 dotenv.config({ path: path.join(__dirname, '..', '..', '.env') });
 
 const store = require('../store');
-const { handleUpdate, setDb, resetReportCmdState } = require('../listener');
+const { handleUpdate, setDb, resetReportCmdState, setReportPipelineDelay } = require('../listener');
 
 function buildMessage(text, chatId) {
   return {
@@ -84,6 +84,10 @@ async function main() {
     setDb(db);
     // Isolate queue/re-entrancy state from any prior scenario in this process.
     resetReportCmdState();
+    // Deterministic depth-1 queue: slow the pipeline enough that u2 lands
+    // while u1 is in flight, and u3 lands while u2 is queued. Only affects
+    // the in-memory replay process, never the live listener (different process).
+    setReportPipelineDelay(1500);
 
     const chatId = scenario === 'wrongchat' ? String(Number(group) + 1) : group;
     let text;
@@ -113,10 +117,10 @@ async function main() {
       const u1 = buildUpdate(buildMessage(text, chatId));
       const u2 = buildUpdate(buildMessage(text, chatId));
       const u3 = buildUpdate(buildMessage(text, chatId));
-      await handleUpdate(u1); // schedules the in-flight job and returns early
-      const p2 = handleUpdate(u2); // queued → awaits its own turn
+      const p1 = handleUpdate(u1); // leader: resolves after its OWN turn (queue still drains)
+      const p2 = handleUpdate(u2); // queued → resolves after its own turn
       const p3 = handleUpdate(u3); // queue full → immediate drop reply, resolves fast
-      await Promise.all([p2, p3]);
+      await Promise.all([p1, p2, p3]);
       console.log(
         'REPLAY-REPORT queue: expected TWO "/report outcome" lines, one DRY-RUN sendMessage "Ya hay un reporte en curso"',
       );
