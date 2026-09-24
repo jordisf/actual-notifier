@@ -1,26 +1,16 @@
 'use strict';
 
 /**
- * Interactive-notification listener (design §3.2/§3.4).
+ * Interactive-notification listener (design §3.2/§3.4) + /report command
+ * (003-telegram-report-command, contracts/commands.md).
  *
- * Long-poll loop over getUpdates({ allowed_updates: ['callback_query'] })
+ * Long-poll loop over getUpdates({ allowed_updates: ['callback_query', 'message'] })
  * with a durable poll offset in the shared store (kv table) and exponential
- * backoff on errors. Each callback is dispatched through handleUpdate:
- *
- *   1. parse callback_data  v1:<itemRef>:<actionRef>
- *   2. resolve the interaction row (SQLite only — fast)
- *   3. fast status handling: duplicate / expired / claim (guarded UPDATE)
- *   4. EXACTLY ONE answerCallbackQuery per callback, ALWAYS before any
- *      slow Actual API work ("early" = after the sub-ms SQLite claim)
- *   5. for a won claim: ACTION_REGISTRY[<action_kind>](fresh row), then
- *      confirm/fail back via editMessageText (never a 2nd answerCallback).
- *
- * Store: same DATA_DIR as the cron process — that is the point of the
- * shared SQLite file. One listener process per deployment (compose).
- *
- * Exports { handleUpdate, main }; `node src/listender.js` (i.e. when run
- * directly) starts the loop. `handleUpdate(db, update)` is consumed by
- * the offline replay driver (src/dev/replay-callback.js) without network.
+ * backoff on errors. Callbacks are dispatched through handleUpdate; group
+ * messages matching /report trigger runOnDemandReport (same pipeline as the
+ * 20:00 cron: compute -> attachTxIds -> runReport with trigger 'telegram-command').
+ * At boot (and whenever the bot token changes via .env) the /report entry is
+ * registered in the client command menu via setMyCommands.
  */
 
 const fs = require('fs');
@@ -34,6 +24,8 @@ const store = require('./store');
 const actual = require('./actual');
 const bot = require('./telegram/bot');
 const send = require('./telegram/send');
+const { compute } = require('./report');
+const { attachTxIds, runReport } = require('./reporte');
 const { log } = require('./log');
 const { ACTION_REGISTRY } = require('./actions');
 
@@ -138,7 +130,11 @@ function buildResultText(row, result) {
 }
 
 /**
- * Handle one update { update_id, callback_query }.
+ * Handle one update { update_id, callback_query } or { update_id, message }.
+ *
+ * 003-telegram-report-command: `message` updates are routed to
+ * handleMessage() which only recognizes the /report command in the
+ * configured group — everything else is ignored silently (spec FR-008/FR-010).
  *
  * Uses the module-scoped store handle (set by main()/setDb, or opened
  * lazily for the offline replay driver). Never throws: all per-update
@@ -146,6 +142,13 @@ function buildResultText(row, result) {
  */
 async function handleUpdate(u) {
   const db = getDb();
+
+  const msg = u && u.message;
+  if (msg && typeof msg.text === 'string') {
+    await handleMessage(msg);
+    return;
+  }
+
   const cb = u && u.callback_query;
   if (!cb || !cb.id) return;
   const from = cb.from || {};
@@ -267,6 +270,210 @@ async function handleUpdate(u) {
   }
 }
 
+// ===========================================================================
+// /report group command (003-telegram-report-command, contracts/commands.md)
+// ===========================================================================
+
+/**
+ * Recognition rule (contract §3): trimmed text must be exactly `/report` or
+ * `/report@<botusername>`; the chat-id guard (contract §3/FR-010) is applied
+ * separately in handleMessage. Deliberately does NOT depend on the bot
+ * username being known (the listener does not call getMe).
+ */
+const REPORT_CMD_RE = /^\/report(@[A-Za-z0-9_]+)?\s*$/;
+
+/**
+ * In-process re-entrancy guard (research R8): flags on the promise of the
+ * running report plus at most ONE queued follow-up (depth 1). A third
+ * concurrent request is replied to but NOT queued. Process-local only — a
+ * restart implies no report in flight (data-model.md).
+ */
+let reportInFlight = null;
+let reportQueued = null; // { msg, resolve } | null
+let registeredMenuToken = null; // token last used for a successful setMyCommands
+
+/**
+ * Test hook for the offline replay driver (src/dev/replay-report-cmd.js):
+ * clears the in-process command queue so a scenario never inherits state from
+ * a previous scenario in the same process. Production code never calls this.
+ */
+function resetReportCmdState() {
+  reportInFlight = null;
+  reportQueued = null;
+}
+
+async function handleMessage(msg) {
+  const text = (msg.text || '').trim();
+  if (!REPORT_CMD_RE.test(text)) return; // free-form: ignore, no reply (FR-008)
+
+  const group = (process.env.TELEGRAM_GROUP_ID || '').trim();
+  if (!group || String(msg.chat.id) !== group) return; // not the group (FR-010)
+
+  const from = msg.from || {};
+  log('info', 'listener', '/report received', {
+    chat_id: msg.chat.id,
+    user_id: from.id != null ? from.id : null,
+    username: from.username || null,
+  });
+
+  // Re-entrancy (R8): running + queued + this one → reply, do not queue.
+  if (reportInFlight && reportQueued) {
+    try {
+      await bot.sendMessage(msg.chat.id, '⏳ Ya hay un reporte en curso; este no se procesará.');
+    } catch (errMsg) {
+      log('warn', 'listener', 'No se pudo responder al comando descartado', { err: errMsg.message });
+    }
+    log('info', 'listener', '/report dropped (queue full)', { chat_id: msg.chat.id });
+    return;
+  }
+
+  // Send the immediate progress ack BEFORE any Actual work (research R5),
+  // then hand off to the queue.
+  let ackMessageId = null;
+  try {
+    const data = await bot.sendMessage(msg.chat.id, '⏳ Generando reporte…');
+    ackMessageId = data && data.message_id != null ? data.message_id : null;
+  } catch (errAck) {
+    // The ack failed (token/group misconfig): still run the report — the
+    // delivery itself will surface the failure in the group.
+    log('warn', 'listener', 'No se pudo enviar el aviso de progreso; el reporte sigue', {
+      err: errAck.message,
+    });
+  }
+
+  const job = { msg, ackMessageId };
+  if (!reportInFlight) {
+    reportInFlight = (async () => {
+      try {
+        await runOnDemandReport(job);
+        while (reportQueued) {
+          const next = reportQueued;
+          reportQueued = null;
+          const resolveNext = next.resolve || (() => {});
+          try {
+            await runOnDemandReport(next);
+          } catch (errNext) {
+            log('error', 'listener', 'Reporte en cola falló', { err: errNext.message });
+          } finally {
+            resolveNext();
+          }
+        }
+      } finally {
+        reportInFlight = null;
+      }
+    })();
+    return;
+  }
+  // One already running: queue this one (depth 1) and wait for its turn.
+  await new Promise((resolve) => {
+    reportQueued = { ...job, resolve };
+  });
+}
+
+/**
+ * The on-demand pipeline (contract §4): compute() current-state, attachTxIds,
+ * the shared runReport tail (trigger 'telegram-command'), and the empty
+ * acknowledgment (FR-007) or failure edit (contract §4 step 3).
+ */
+async function runOnDemandReport(job) {
+  const { msg, ackMessageId } = job;
+  const outcome = { tag: 'failed' };
+  const chatId = String(msg.chat.id);
+  try {
+    const handle = await actual.open();
+    try {
+      const reporte = await compute(handle);
+      const {
+        syncOk, syncMensaje, mesActual,
+        transaccionesSinCategorizar, datosConsumo, categoriasNegativas,
+      } = reporte;
+
+      const txList = await attachTxIds(handle, transaccionesSinCategorizar, mesActual);
+      const db = getDb();
+      const allCategories = await actual.getCategories(handle.api);
+
+      const empty = txList.length === 0;
+      const result = await runReport(db, {
+        txList,
+        chatId,
+        allCategories,
+        mesActual,
+        syncOk,
+        syncMensaje,
+        datosConsumo,
+        categoriasNegativas,
+        emailSent: false,
+        trigger: 'telegram-command',
+        skipWhenEmpty: true, // empty ⇒ ack edit instead of a full report (FR-007)
+        logTag: 'listener',
+      });
+
+      // US3 (FR-007): brief acknowledgment when there is nothing to report.
+      if (empty) {
+        outcome.tag = 'empty';
+        const ackText = '✅ Reporte procesado: no hay movimientos pendientes de categorizar y todo va al día.';
+        if (ackMessageId != null) {
+          try {
+            await bot.editMessageText(chatId, ackMessageId, ackText);
+          } catch (errEdit) {
+            await bot.sendMessage(chatId, ackText);
+          }
+        } else {
+          await bot.sendMessage(chatId, ackText);
+        }
+      } else {
+        outcome.tag = result.delivered ? 'sent' : 'failed';
+      }
+    } finally {
+      await actual.close(handle);
+    }
+  } catch (err) {
+    outcome.tag = 'failed';
+    log('error', 'listener', 'Reporte on-demand falló', { err: err.message });
+    const failText = '❌ No se pudo generar el reporte (error interno).';
+    if (ackMessageId != null) {
+      try {
+        await bot.editMessageText(chatId, ackMessageId, failText);
+      } catch (errEdit) {
+        try {
+          await bot.sendMessage(chatId, failText);
+        } catch (errSend) {
+          log('error', 'listener', 'No se pudo notificar el fallo en el grupo', {
+            err: errSend.message,
+          });
+        }
+      }
+    }
+  }
+  log('info', 'listener', '/report outcome', {
+    chat_id: msg.chat.id,
+    user_id: (msg.from || {}).id != null ? msg.from.id : null,
+    outcome: outcome.tag,
+  });
+}
+
+/**
+ * Register the bot's command menu (003-telegram-report-command, R6/contract §1).
+ * Idempotent: Telegram replaces the whole menu on each call. The bot username
+ * isn't needed — the menu belongs to whichever token set TELEGRAM_BOT_TOKEN.
+ * Registration failure is logged and does NOT stop the poll loop.
+ */
+async function ensureCommandMenu() {
+  const token = (process.env.TELEGRAM_BOT_TOKEN || '').trim();
+  if (!token) return;
+  try {
+    await bot.setMyCommands([
+      { command: 'report', description: 'Generar el reporte ahora' },
+    ]);
+    registeredMenuToken = token;
+    log('info', 'listener', 'Menú de comandos registrado (setMyCommands OK)');
+  } catch (err) {
+    log('warn', 'listener', 'No se pudo registrar el menú de comandos; se reintentará al cambiar el token o reiniciar', {
+      err: err.message,
+    });
+  }
+}
+
 /**
  * Long-poll main loop (design §3.2):
  *  - offset persisted in kv('poll_offset') AFTER each batch is processed;
@@ -283,6 +490,10 @@ async function main() {
   // driver can also set it via setDb(), or handleUpdate opens one lazily.
   const db = store.open();
   setDb(db);
+
+  // Register the /report command menu before taking over polls (T012/R6).
+  // Non-blocking: a failure here only logs; the loop re-tries on token change.
+  await ensureCommandMenu();
 
   let stopped = false;
   const onSignal = (sig) => {
@@ -307,6 +518,13 @@ async function main() {
   for (;;) {
     if (stopped) return;
     reloadTelegramEnv();
+    // Re-register the command menu if the bot token changed via .env (T012).
+    if (
+      (process.env.TELEGRAM_BOT_TOKEN || '').trim() &&
+      process.env.TELEGRAM_BOT_TOKEN !== registeredMenuToken
+    ) {
+      await ensureCommandMenu();
+    }
     const offset = Number(store.kvGet(db, 'poll_offset') || 0);
     const pollTimeoutSec = Number(process.env.TELEGRAM_POLL_TIMEOUT) || POLL_TIMEOUT_SEC;
     let updates;
@@ -314,7 +532,7 @@ async function main() {
       updates = await bot.getUpdates({
         offset,
         timeout: pollTimeoutSec,
-        allowed_updates: ['callback_query'],
+        allowed_updates: ['callback_query', 'message'],
       });
     } catch (err) {
       log('error', 'listener', 'getUpdates error', { err: err.message, backoff });
@@ -347,7 +565,7 @@ async function main() {
   }
 }
 
-module.exports = { handleUpdate, main };
+module.exports = { handleUpdate, main, setDb, resetReportCmdState };
 
 if (require.main === module) {
   main().catch((err) => {
