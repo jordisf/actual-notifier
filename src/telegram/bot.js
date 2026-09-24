@@ -122,10 +122,19 @@ async function getUpdates(params) {
   return request('getUpdates', params || {});
 }
 
+/**
+ * Register the bot's command menu (003-telegram-report-command, R6).
+ * Idempotent: Telegram replaces the whole list on each call.
+ */
+async function setMyCommands(commands) {
+  return request('setMyCommands', { commands });
+}
+
 module.exports = {
   request,
   sendMessage,
   answerCallbackQuery,
   editMessageText,
   getUpdates,
+  setMyCommands,
 };

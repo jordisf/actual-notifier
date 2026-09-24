@@ -32,11 +32,13 @@ services:
   notifier-listener:
     <<: *notifier-base
     container_name: notifier_listener
-    # Self-detecting command: while src/listener.js does not exist (before S4)
-    # the guard logs once and sleeps, keeping the service up quietly — a clean
-    # `exit 0` would loop under restart: unless-stopped. Once S4 lands
-    # src/listener.js (mounted :ro), the same line execs the listener; no
-    # compose edit is needed at that point.
+    # 003-telegram-report-command (R2/T006): persist the Actual working copy
+    # on the shared volume so on-demand runs use a warm cache (the ephemeral
+    # /tmp default would re-download on every restart). The bank-sync marker
+    # itself already lives under DATA_DIR (report.js).
+    environment:
+      TZ: Europe/Madrid
+      LISTENER_DATA_DIR: /app/data/actual-listener-cache
     command: |
       sh -c '
       if [ ! -f /app/src/listener.js ]; then
