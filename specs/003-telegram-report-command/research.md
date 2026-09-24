@@ -1,0 +1,59 @@
+# Research: On-Demand Report Command (Telegram Group)
+
+**Feature**: `003-telegram-report-command` | **Date**: 2026-09-24
+
+All `NEEDS CLARIFICATION` items from Technical Context were resolved during the assessment pipeline (`.specify/assessments/telegram-on-demand/`) and the user clarify round on 2026-09-24. This document records the open **technical** unknowns and their resolutions.
+
+## R1 — Does the raw-fetch Bot API client support `setMyCommands` and `message` updates?
+
+- **Decision**: Yes — validated live on 2026-09-24 against the real token. `getMe` returned `@dev_finjb_bot` (id 8451618156), `getMyCommands` returned 0 registered commands (clean slate for registration), and `getUpdates` with `allowed_updates` over plain HTTP JSON succeeded. The client pattern in `src/telegram/bot.js` (raw `fetch` POST to `api.telegram.org/bot<token>/<method>` with a JSON body) is method-agnostic, so `setMyCommands` is one more wrapper with `{ commands: [{ command, description }] }`.
+- **Rationale**: The assessment flagged this as "assumption from general Bot API knowledge, not re-verified". It is now verified; no implementation-time risk remains on this item.
+- **Alternatives considered**: Using a Bot framework (`grammY`, `node-telegram-bot-api`) — rejected: violates the zero-new-dependency gate and the established raw-fetch convention.
+- **Note**: `setMyCommands` was deliberately not executed against the live bot (mutation); the read-side of the same API family (`getMyCommands`) is the reachability proof. The actual call is idempotent boot-time work in the listener (R6).
+
+## R2 — Bank-sync marker: two independent markers today (cron and listener live in separate containers)
+
+- **Finding (verified in code)**: `src/reporte-diario.js` opens the Actual cache at `/tmp/actual-cache` ("Cron siempre usa su propio dataDir efímero (marcador de throttle incluido)"), and `src/report.js` writes the marker to `${dataDir}/last-bank-sync.txt`. Each container has its own `/tmp`, so **today the 60-minute throttle is per-container**: an on-demand run in the listener container would not see the cron's sync and could double-sync a bank account minutes apart.
+- **Decision**: Move the marker into the shared volume: `path.join(DATA_DIR, 'last-bank-sync.txt')` (DATA_DIR resolves to `/app/data`, mounted `./data` in both notifier containers). Keep reading the legacy marker as a fallback for the one transition where `/tmp` may hold the cron's existing value (or simply ignore the legacy value — losing one 60-min window of grace at redeploy is harmless).
+- **Rationale**: The shared marker makes "the report reflects current bank state, throttled to one sync/hour" a deployment-wide invariant, which FR-003/FR-006 and success metric SC-002 depend on. The listener container must use a **persistent** Actual cache dir on the shared volume for the same reason (its per-container `/tmp` cache would otherwise re-download; `DATA_DIR/actual-cache` gives it a warm cache without touching cron's).
+- **Alternatives considered**: (a) Keep per-container markers and accept double sync — rejected: two PSD2 bank syncs minutes apart is exactly the kind of thing that breaks a bank API rate limit. (b) A `kv` table lock for sync serialization — rejected as over-engineering: a single marker file + the fact that each run reads the marker *before* syncing is sufficient for this usage pattern (no concurrent trigger expected; SC-005's repeated-request case is seconds-to-minutes apart).
+
+## R3 — Where does on-demand state live: does the listener need new tables?
+
+- **Finding (verified in code)**: `src/store.js` DDL already has everything: `reports` (row per delivery with `run_at`, `sync_ok`, counts), `interactions` (per uncategorized tx, with D6 status machine), `kv`. The on-demand run inserts the same rows with a `run_at` discriminator.
+- **Decision**: Add **exactly one** `reports` column — `trigger TEXT NOT NULL DEFAULT 'cron'` (values: `cron` | `telegram-command`) — so the store can answer "when was the last report" for future observability without a migration beyond the additive ALTER. Everything else reuses existing rows/queries as-is; `run_at` stays `UNIQUE` (on-demand runs are seconds/minutes apart in practice, and the dominant case reuses the *freshness* of data, not duplicate timestamps).
+- **Rationale**: Minimal schema surface = minimal review surface; the assessment's non-goals forbid new configuration surfaces.
+- **Alternatives considered**: No new column and infer trigger from call stack — rejected: unobservable later. A `triggered_by` user id — deferred: single-user homelab (Assumptions), would be follow-up if the group ever gains members.
+
+## R4 — Extract the pipeline or duplicate it?
+
+- **Finding (verified in code)**: `src/reporte-diario.js` intermixes email construction (PASO 4, the container for the **exit contract**: email failure ⇒ `process.exit(1)`) with the Telegram tail (PASOS 6-9: `store.insertReport`, `send.sendReport`, `setReportTelegram`, D6 `expirePreviousPending` + expired-footer edits, `answersRetentionSweep`). The listener path must perform PASOS 6-9 (minus email) against the *same* `reports` rows so D6 expiry and claim mechanics keep working identically (FR-002, SC-004).
+- **Decision**: Extract the Telegram tail (PASOS 6-9 + the `attachTxIds` prep) into a new `src/reporte.js` module exporting `sendTelegramReport({ db, dataFromCompute, mesActual })` (name to be finalized in tasks). `reporte-diario.js` keeps email inline (source of truth, exit contract byte-for-byte) and calls the same tail it used to inline. The listener's command handler calls `compute()` + `attachTxIds` + the same tail, without any email step. `attachTxIds` moves with the shared module or is exported from `reporte-diario.js` — decided at implementation by whichever keeps `reporte-diario.js`'s diff smallest.
+- **Rationale**: Duplicating the D6/retention bookkeeping for a second channel is the classic drift trap; the assessment's success metric SC-004 (no regression in the scheduled flow) is cheapest to *prove* when both channels literally share the code path.
+- **Alternatives considered**: (a) Fully refactor `reporte-diario.js` into a general `runReport({ sendEmail })` including HTML — rejected as a larger surface than the feature needs: the cron's HTML/email path is explicitly out of scope and must not change. (b) Have the listener shell out to `node src/reporte-diario.js` — rejected: forces the email path to run (or be guarded), pollutes the exit contract, and adds process-management inside a long-poll loop.
+
+## R5 — Command acknowledgment: Telegram's 60-second callback window
+
+- **Finding**: Telegram expects an ack/progress signal from the bot quickly; a bank-syncing report can exceed a minute. The listener's existing pattern for callbacks (`answerCallbackQuery` immediately with "⏳ Procesando…", then `editMessageText` when done) shows the idiom this repo already uses for long work.
+- **Decision**: For `/report` the listener replies **immediately** with a short "⏳ Generando reporte…" message via the existing `sendMessage`, then performs the pipeline, then sends the report as usual. If the pipeline fails, that same message is edited to a short error line (no stack traces into the group). No ack is silently dropped, and the report itself (summary + interactive tx messages) is sent by the shared tail exactly as the cron does it.
+- **Rationale**: One extra short message is the cheapest way to satisfy both Telegram UX and the "repeated requests are permitted" rule (FR-005): each request gets its own progress message and its own delivery, and the empty-report path (FR-007) edits the progress message to "todo al día" instead of sending the full report.
+- **Alternatives considered**: (a) Optimistic immediate report with stale data — rejected, contradicts FR-003. (b) `sendChatAction('typing')` loop — nice-to-have; permitted refinement at implementation but not spec'd here.
+
+## R6 — Command menu registration lifecycle in the listener
+
+- **Decision**: `ensureCommandMenu()` runs once at boot and re-runs whenever `reloadTelegramEnv()` detects a changed `TELEGRAM_BOT_TOKEN` (the listener already re-reads the four `TELEGRAM_*` keys every poll cycle — the same hook point). Registration is the single `/report` entry with a short Spanish description (artifact language for Telegram-facing strings follows the existing bot's Spanish message convention, e.g. "❌ Comando inválido", "⌛ Reporte expirado"). Registration failure is logged and retried on the next token-change/restart — it never blocks the poll loop.
+- **Rationale**: The panel can rotate the token without a restart; a menu registered under the old token would disappear if the new token is a *different* bot — re-registering on change covers that. No new config key needed: the command name/description are code constants (non-goal: no panel UI, no config surface).
+- **Alternatives considered**: Registering from a one-off `entrypoint`/cron — rejected: the listener owns the Bot token lifecycle at runtime, so it owns registration.
+
+## R7 — What exactly should the listener accept as the command?
+
+- **Decision**: Accept the command when `message.text` (after trim) equals `/report` or `/report@dev_finjb_bot` — i.e. the command name with any `@bot_username` suffix, matching only the bot's known username **or** accepting the suffix generically (Telegram sends `/report@<botusername>` for group commands; generic `^/report(@[A-Za-z0-9_]+)?$` is the safe form) — AND `message.chat.id` matches `TELEGRAM_GROUP_ID` (string compare, `TELEGRAM_GROUP_ID` is a string in config). Everything else: ignore without replying (FR-008, FR-010).
+- **Rationale**: Group chats route bot commands with the `@bot` suffix; not matching it would make the menu-selected command a no-op from the client (US2's acceptance scenario is broken). Chat-id guard is the FR-010 requirement (no DMs) and the assessment's "any member" authorization (D3-consistent: no per-user allow-list).
+- **Alternatives considered**: Parsing via a command parser library — rejected (dependency gate). Responding to unknown commands with a hint ("usá /report") — deferred: it is a discoverability refinement beyond FR-008's "does not engage in free-form replies"; the menu (R6) already covers discoverability (US2).
+
+## R8 — Concurrency: can a `/report` arrive while the cron (or another `/report`) is mid-run?
+
+- **Finding (verified in code)**: SQLite WAL + `busy_timeout=5000` is the whole inter-process story; `claimAnswer`'s guarded UPDATE is the only lock-sensitive path and it is already crash-safe. Two simultaneous report runs would both insert `reports` rows and both flip D6 expiry — the outcome is "whatever finished last superseded the other", which matches the accepted behavior (repeated deliveries re-expire; Assumptions).
+- **Decision**: Add a cheap in-process re-entrancy guard in the listener only: a `reportInFlight` flag; if a second `/report` arrives while one is running, the progress reply edits to "⏳ Ya hay un reporte en curso, este se procesa cuando termine" and the request is queued as a single follow-up (max queue depth 1). The cron is a separate process and is *not* blocked by this guard (WAL handles their writes).
+- **Rationale**: The user accepted "repeated requests re-send", but they did not accept *interleaved* deliveries (two summaries + two sets of buttons crossing in the group). Depth-1 makes "the second request is honored" (FR-005: each request MUST regenerate and re-deliver) observable while keeping the group timeline linear.
+- **Alternatives considered**: (a) Drop the second request — violates FR-005. (b) A cross-process `kv` lock shared with cron — rejected: the cron's run time is dominated by bank sync; making the listener wait on the cron's lock for minutes is worse than a same-process queue, and WAL already makes their writes safe.
