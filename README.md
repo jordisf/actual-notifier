@@ -10,6 +10,8 @@ En cada ejecución:
 4. Calcula la disponibilidad de las categorías objetivo y detecta sobregastos.
 5. Envía un reporte HTML por **SMTP** a los destinatarios configurados.
 
+Además, el bot de Telegram responde al comando de grupo **`/report`** (visible en el menú de comandos del cliente): regenera y entrega ese mismo reporte bajo demanda, en cualquier momento. Sin nueva superficie de configuración.
+
 ---
 
 ## Requisitos

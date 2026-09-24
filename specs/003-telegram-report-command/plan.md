@@ -66,8 +66,8 @@ specs/003-telegram-report-command/
 ```text
 src/
 ├── reporte.js              # NEW — extracted report pipeline: async runReport({ sendEmail,
-│                           #   telegramChatId, ... }) implementing steps 1-9 of
-│                           #   hoje's reporte-diario.js with the email channel
+│                           #   telegramChatId, ... }) implementing the steps of
+│                           #   reporte-diario.js with the email channel
 │                           #   switchable; D6 expiry + retention included
 ├── reporte-diario.js       # refactored — cron entry: keeps HTML-email construction as
 │                           #   today (source of truth, exit contract preserved), then
