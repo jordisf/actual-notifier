@@ -79,18 +79,31 @@ function open(dataDir) {
   db.pragma('busy_timeout = 5000');
   db.pragma('foreign_keys = ON');
   db.exec(DDL);
+  migrateReportsTrigger(db);
   return db;
+}
+
+/**
+ * 003-telegram-report-command (data-model.md): additive, idempotent
+ * migration for reports.trigger. SQLite has no `ADD COLUMN IF NOT EXISTS`,
+ * so guard with PRAGMA table_info — runs on every open, costs two
+ * statements, no-op once the column exists.
+ */
+function migrateReportsTrigger(db) {
+  const cols = db.prepare(`PRAGMA table_info(reports)`).all().map((c) => c.name);
+  if (cols.includes('trigger')) return;
+  db.exec(`ALTER TABLE reports ADD COLUMN trigger TEXT NOT NULL DEFAULT 'cron'`);
 }
 
 // --- reports ---------------------------------------------------------------
 
-function insertReport(db, { run_at, sync_ok, sync_message, tx_uncategorized_count, email_sent = 0, telegram_summary_sent = 0, telegram_tx_sent = 0 }) {
+function insertReport(db, { run_at, sync_ok, sync_message, tx_uncategorized_count, email_sent = 0, telegram_summary_sent = 0, telegram_tx_sent = 0, trigger = 'cron' }) {
   const r = db
     .prepare(
-      `INSERT INTO reports (run_at, sync_ok, sync_message, tx_uncategorized_count, email_sent, telegram_summary_sent, telegram_tx_sent)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO reports (run_at, sync_ok, sync_message, tx_uncategorized_count, email_sent, telegram_summary_sent, telegram_tx_sent, trigger)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
     )
-    .run(run_at, sync_ok ? 1 : 0, sync_message, tx_uncategorized_count, email_sent ? 1 : 0, telegram_summary_sent ? 1 : 0, telegram_tx_sent ? 1 : 0);
+    .run(run_at, sync_ok ? 1 : 0, sync_message, tx_uncategorized_count, email_sent ? 1 : 0, telegram_summary_sent ? 1 : 0, telegram_tx_sent ? 1 : 0, trigger);
   return r.lastInsertRowid;
 }
 

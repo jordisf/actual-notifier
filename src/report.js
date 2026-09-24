@@ -24,9 +24,11 @@
  *   }
  *
  * Signature: `compute(handle)` where `handle` is the object returned by
- * `actual.open(...)` — `{ api, dataDir }`. `dataDir` is required for the
- * bank-sync throttle marker path. The bank-sync stdout-suppression trick is
- * load-bearing (the Actual API dumps a large transaction list to stdout) and
+ * `actual.open(...)` — `{ api, dataDir }`. The bank-sync throttle marker
+ * now lives in the shared DATA_DIR (003-telegram-report-command, research
+ * R2): cron and listener honor ONE 60-minute throttle across containers.
+ * The legacy per-container marker path is only read as a one-time fallback.
+ * The bank-sync stdout-suppression trick is load-bearing (the Actual API dumps a large transaction list to stdout) and
  * is preserved exactly.
  *
  * `CATEGORIAS_OBJETIVO` lives here (exported) because it drives step 3; T4
@@ -34,6 +36,7 @@
  */
 
 const fs = require('fs');
+const path = require('path');
 const { log } = require('./log');
 
 // 1. Categorías prioritarias de gasto corriente del hogar (Grupo 2)
@@ -57,15 +60,22 @@ async function compute(handle) {
   let syncMensaje = '';
 
   // Throttle: solo sincronizar con el banco si la última vez fue hace más de una hora.
+  // Shared marker: $DATA_DIR/last-bank-sync.txt — one throttle window for cron
+  // and listener alike (both mount ./data). The per-container marker that used
+  // to live in the ephemeral dataDir is only READ as a legacy fallback.
   const SYNC_INTERVAL_MS = 60 * 60 * 1000;
-  const syncMarkerPath = `${dataDir}/last-bank-sync.txt`;
-  let ultimaSync = null;
-  try {
-    ultimaSync = parseInt(fs.readFileSync(syncMarkerPath, 'utf8').trim(), 10);
-    if (!Number.isFinite(ultimaSync)) ultimaSync = null;
-  } catch {
-    ultimaSync = null;
-  }
+  const syncMarkerPath = path.join(process.env.DATA_DIR || '/app/data', 'last-bank-sync.txt');
+  const legacyMarkerPath = `${dataDir}/last-bank-sync.txt`;
+  const readMarker = (p) => {
+    try {
+      const v = parseInt(fs.readFileSync(p, 'utf8').trim(), 10);
+      return Number.isFinite(v) ? v : null;
+    } catch {
+      return null;
+    }
+  };
+  let ultimaSync = readMarker(syncMarkerPath);
+  if (ultimaSync === null) ultimaSync = readMarker(legacyMarkerPath);
   const msDesdeUltima = ultimaSync ? Date.now() - ultimaSync : null;
 
   // Interceptar temporalmente stdout para suprimir el dump de transacciones de Actual API
