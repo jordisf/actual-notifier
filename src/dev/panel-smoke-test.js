@@ -81,24 +81,27 @@ async function main() {
   const loginCookie = r.headers.get('set-cookie').split(';')[0];
   console.log('OK: POST /login correct password succeeds');
 
-  // 10. Lockout: 5 consecutive failures should lock out even correct password
+  // 10. Lockout: 5 consecutive failures set the lockout; FR-015 semantics —
+  //     "lock out FURTHER attempts after repeated failures": the 5th failing
+  //     attempt still returns 401 (and sets panel_lockout_until), and the
+  //     lockout (423) applies from the 6th request onward.
   for (let i = 0; i < 5; i++) {
     r = await fetch(`${base}/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: 'username=admin&password=wrongpass',
     });
+    assert.strictEqual(r.status, 401, `failure #${i + 1} should be 401, got ${r.status}`);
   }
-  assert.strictEqual(r.status, 423, `expected 423 on 5th failure, got ${r.status}`);
-  console.log('OK: lockout triggers after 5 consecutive failures (423)');
+  console.log('OK: 5 consecutive failures each rejected with 401 (lockout armed on 5th)');
 
   r = await fetch(`${base}/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: 'username=admin&password=s3cret123',
   });
-  assert.strictEqual(r.status, 423, 'correct password should still be rejected during lockout');
-  console.log('OK: correct password rejected while locked out');
+  assert.strictEqual(r.status, 423, 'correct password should still be rejected while locked out');
+  console.log('OK: 6th request after lockout is 423 even with the correct password');
 
   // 11. Logout clears session, subsequent GET / redirects to /login
   r = await fetch(`${base}/logout`, { method: 'POST', headers: { Cookie: loginCookie }, redirect: 'manual' });
