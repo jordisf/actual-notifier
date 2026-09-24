@@ -394,8 +394,13 @@ async function handleMessage(msg) {
 
 /**
  * The on-demand pipeline (contract §4): compute() current-state, attachTxIds,
- * the shared runReport tail (trigger 'telegram-command'), and the empty
- * acknowledgment (FR-007) or failure edit (contract §4 step 3).
+ * the shared runReport tail (trigger 'telegram-command'). ALWAYS delivers the
+ * full report (category summary + sync line + interactive pending items),
+ * exactly like the cron — post-2026-09-25 spec change: the former "empty
+ * acknowledgment" (old FR-007) was removed so /report is a complete
+ * status-on-demand; the future /pendientes command would cover
+ * pending-only. On pipeline failure the progress message is edited to a
+ * one-line error (contract §4).
  */
 async function runOnDemandReport(job) {
   const { msg, ackMessageId } = job;
@@ -416,7 +421,8 @@ async function runOnDemandReport(job) {
       const db = getDb();
       const allCategories = await actual.getCategories(handle.api);
 
-      const empty = txList.length === 0;
+      // ALWAYS deliver the full report, even when there is nothing pending
+      // (spec change 2026-09-25: /report is a full status-on-demand).
       const result = await runReport(db, {
         txList,
         chatId,
@@ -428,26 +434,11 @@ async function runOnDemandReport(job) {
         categoriasNegativas,
         emailSent: false,
         trigger: 'telegram-command',
-        skipWhenEmpty: true, // empty ⇒ ack edit instead of a full report (FR-007)
+        skipWhenEmpty: false,
         logTag: 'listener',
       });
 
-      // US3 (FR-007): brief acknowledgment when there is nothing to report.
-      if (empty) {
-        outcome.tag = 'empty';
-        const ackText = '✅ Reporte procesado: no hay movimientos pendientes de categorizar y todo va al día.';
-        if (ackMessageId != null) {
-          try {
-            await bot.editMessageText(chatId, ackMessageId, ackText);
-          } catch (errEdit) {
-            await bot.sendMessage(chatId, ackText);
-          }
-        } else {
-          await bot.sendMessage(chatId, ackText);
-        }
-      } else {
-        outcome.tag = result.delivered ? 'sent' : 'failed';
-      }
+      outcome.tag = result.delivered ? 'sent' : 'failed';
     } finally {
       await actual.close(handle);
     }

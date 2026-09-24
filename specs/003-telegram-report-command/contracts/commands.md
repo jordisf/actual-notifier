@@ -41,9 +41,7 @@ Everything else (any other text, stickers, photos, callbacks from unknown sender
 | Step | Message to the group | Notes |
 |------|---------------------|-------|
 | 1 (immediate) | `⏳ Generando reporte…` (`sendMessage`) | Sent before any Actual work, so Telegram UX is never a timeout (research.md R5). |
-| 2a (pipeline OK, has content) | full report as the cron delivers it: summary message + one interactive message per uncategorized tx (existing `sendReport` output) | Step-1 message is left as-is (history shows the request). |
-| 2b (pipeline OK, nothing to report) | step-1 message **edited** to a brief "todo al día" line (no separate report spam) | spec FR-007 / US3. Exact wording is an implementation detail; must make clear no report content was needed. |
-| 3 (pipeline failure) | step-1 message **edited** to a one-line error (no stack traces, no internal paths) | e.g. `❌ No se pudo generar el reporte (error interno).` |
+| 2 (pipeline OK) | full report as the cron delivers it: summary message + one interactive message per uncategorized tx (existing `sendReport` output) — ALWAYS, even when there are no pending txs (changed 2026-09-25: the former "ack-only when empty" row was removed) | Step-1 message is left as-is (history shows the request). spec FR-007 (as amended). |
 
 ## 5. Concurrency surface
 
@@ -59,5 +57,5 @@ Everything else (any other text, stickers, photos, callbacks from unknown sender
 
 ## 7. Observability
 
-- Every accepted command logs at `info` with: `chat_id`, `from.id`, `from.username`, and a short outcome tag (`sent` | `empty` | `failed` | `queued-dropped`).
+- Every accepted command logs at `info` with: `chat_id`, `from.id`, `from.username`, and a short outcome tag (`sent` | `failed` | `queued-dropped`).
 - Every ignored `message` update is NOT logged at info (group noise would be meaningless); malformed/unknown commands are simply not in the recognition set and are ignored by design — logging them would leak every group member's chatter into the log. (Design decision: silence is the correct behavior per FR-008.)

@@ -42,17 +42,15 @@ A group member does not reliably remember the exact command to request the repor
 
 ---
 
-### User Story 3 - Get a clear answer when there is nothing to report (Priority: P3)
+### User Story 3 — CHANGED 2026-09-25 (superseded by user decision)
 
-A group member requests the report at a moment when there are no pending transactions and nothing of interest to show. They should receive a brief, unambiguous acknowledgment instead of silence, so a "blank" response is not mistaken for the command not working.
+**Original scope (implemented then removed in the delivered code):** when nothing was pending, `/report` would edit the progress message to a brief "todo al día" acknowledgment instead of delivering a report (old FR-007, `skipWhenEmpty: true`).
 
-**Why this priority**: This is an edge of User Story 1 that improves perceived reliability. It adds no new capability and is not needed for the core loop to work, so it is lowest priority.
+**Current requirement (accepted by the group owner 2026-09-25):** `/report` MUST always deliver the full report — category-summary status line, sync reference, and interactive pending-item messages when there are pendings — regardless of whether there is anything pending. An empty-pending `/report` yields a full report whose summary simply shows zero uncategorized transactions. A dedicated pending-only command (e.g. `/pendientes`) may be added later as a separate feature; it is explicitly out of scope for 003.
 
-**Independent Test**: Arrange a state with no pending transactions, send the command, and confirm the bot responds with a short "all caught up"-style acknowledgment rather than nothing.
+**Why the change**: during live validation the owner expected the category-status line in every `/report`; the "skip when empty" behavior hid the status they actually wanted to query on demand.
 
-**Acceptance Scenarios**:
-
-1. **Given** there are no pending transactions and nothing to report, **When** a member sends the report command, **Then** the bot replies with a brief acknowledgment that the report ran and found nothing pending (not silence).
+**Independent Test**: with zero pending transactions, send the command and confirm the full summary message (with category balances) is delivered; with pending transactions, confirm summary + interactive items are delivered as before.
 
 ---
 
@@ -74,7 +72,7 @@ A group member requests the report at a moment when there are no pending transac
 - **FR-004**: The report command MUST be discoverable within the Telegram client's command menu for the group, so a member need not know its exact syntax to trigger it.
 - **FR-005**: The system MUST allow the report to be requested repeatedly; each request MUST regenerate and re-deliver the report. (Repeated requests are intentionally not throttled or rate-limited.)
 - **FR-006**: When a request is made within a short window after the last bank synchronization, the delivered summary MUST make clear that the balance figures are current while the bank-synchronization reference is from the previous sync; it MUST NOT imply a new bank pull occurred.
-- **FR-007**: When there are no pending transactions and nothing to report, the system MUST respond with a brief acknowledgment rather than remaining silent.
+- **FR-007** (CHANGED 2026-09-25): The on-demand report MUST ALWAYS be delivered in full (summary + pending items when present); it MUST NOT be skipped or reduced to an acknowledgment when there are no pending transactions. (Supersedes the original "brief acknowledgment when nothing to report" requirement; see User Story 3.)
 - **FR-008**: The system MUST respond to the report command only; it MUST NOT engage in free-form or conversational replies for other messages.
 - **FR-009**: Triggering the report MUST NOT change who is allowed to categorize transactions or otherwise alter the existing categorization authorization rules.
 - **FR-010**: The on-demand interaction MUST be available only within the configured group; it MUST NOT be offered via private messages to the bot.

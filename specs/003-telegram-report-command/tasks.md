@@ -72,13 +72,15 @@ the command is discoverable and works from the menu with zero syntax knowledge.
 
 ---
 
-## Phase 5: User Story 3 - Get a clear answer when there is nothing to report (Priority: P3)
+## Phase 5: User Story 3 - Full report whenever, including with nothing pending (Priority: P3)
 
-**Goal**: an on-demand report with no pending content edits the `⏳` progress message to a brief Spanish "al día" line instead of sending a full report (spec FR-007, US3).
+**CHANGED 2026-09-25**: the original "empty acknowledgment instead of a report" was superseded — `/report` now always delivers the full report (spec US3 as amended).
 
-**Independent Test**: categorize all pending txs, send `/report` → the progress message becomes the acknowledgment, no full report is sent (quickstart step 6).
+**Goal**: an on-demand report with no pending content still delivers the full summary (category balances) instead of a bare acknowledgment (spec FR-007 as amended, US3).
 
-- [X] T014 [US3] Implement the empty-report path in `src/listener.js` (via the shared `runReport` result): when there is nothing to deliver, `editMessageText` the progress message to the brief acknowledgment and skip report sending; tag the log outcome `empty` (contract §4 step 2b, spec FR-007)
+**Independent Test**: categorize all pending txs, send `/report` → the full summary message is delivered with 0 uncategorized and no interactive items (quickstart step 6 as amended).
+
+- [X] T014 [US3] Implement the always-full-report behavior in `src/listener.js` (via the shared `runReport` result): `skipWhenEmpty: false` for on-demand, so `runReport` delivers the full report even with an empty pending list; the former empty-ack path (editMessageText "todo al día") was removed (spec change 2026-09-25)
 - [X] T015 [US3] Verify in the homelab the acknowledgment wording is unambiguous ("the report ran, nothing pending") and that with pending items present the full report is still sent instead (quickstart steps 4 + 6)
 
 ---
@@ -115,7 +117,7 @@ Notes:
 
 ## Implementation Strategy
 
-**MVP = Phase 2 + Phase 3 (US1)**: a member who already knows the command gets the full value (fresh report on demand, categorize→re-report loop) even with no menu discoverability. US2 makes it usable by memory-less humans; US3 polishes the empty edge.
+**MVP = Phase 2 + Phase 3 (US1)**: a member who already knows the command gets the full value (fresh report on demand, categorize→re-report loop) even with no menu discoverability. US2 makes it usable by memory-less humans; US3 (as amended 2026-09-25) guarantees the full report even when nothing is pending.
 
 **Incremental delivery**:
 1. Foundation (Phase 2) → quickstart step 7 proves the cron is regression-free *before* any listener work.

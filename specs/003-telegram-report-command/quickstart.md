@@ -59,11 +59,11 @@ Expected, in order:
 
 Expected: a **new** full report; its `sin categorizar` count reflects your categorization (lower than step 4); the previously pending buttons are now marked `⌛ Reporte expirado` (D6, accepted behavior); the new report is interactive.
 
-### 6. Empty-report acknowledgment
+### 6. Full report with nothing pending (spec change 2026-09-25)
 
-Categorize **all** remaining pending txs, then send `/report` again.
+With all pending txs categorized, send `/report` again.
 
-Expected: the `⏳` message is edited to the brief "todo al día" line; **no** full report is sent (spec US3 / FR-007).
+Expected: the **full report is still delivered** — summary message with category balances (as in the cron output) and no interactive item messages, because there are none pending. There is no "ack-only" mode anymore (old FR-007 superseded; US3 as amended).
 
 ### 7. No-regression check for the cron path
 
@@ -80,13 +80,13 @@ Expected: the `⏳` message is edited to the brief "todo al día" line; **no** f
 ### 9. Repeated-request stress (spec SC-005)
 
 Send `/report` 10 times across a session, interspersed with categorizations (steps 5/6 cycle). Verify:
-- each request got a `⏳` then a delivery or an "al día" edit (nothing silently dropped, nothing interleaved mid-delivery by the depth-1 queue),
+- each request got a `⏳` then a full report delivery (nothing silently dropped, nothing interleaved mid-delivery by the depth-1 queue),
 - `node --check` still passes, no `better-sqlite3` busy errors in `docker logs notifier_listener`,
 - pending rows in the store are either `answered` or point at the newest report (no orphans from a dropped delivery).
 
 ### 10. Offline iteration (no group)
 
-Use the `src/dev/` replay-driver pattern (like `replay-callback.js`): a small dev script that feeds a synthetic `/report` **message update object** into the listener's handler function directly (no `getUpdates` involved), so you can exercise recognition rules, the empty path, and error edits without the live bot. This is part of the repo's established convention and is listed in the plan's file structure.
+Use the `src/dev/` replay-driver pattern (like `replay-callback.js`): a small dev script that feeds a synthetic `/report` **message update object** into the listener's handler function directly (no `getUpdates` involved), so you can exercise recognition rules, the nothing-pending full-report path, and error edits without the live bot. This is part of the repo's established convention and is listed in the plan's file structure.
 
 ## Rollback notes
 

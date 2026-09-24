@@ -18,9 +18,9 @@
  *            curso" and dropped (contract §5). Expects the listener logs to
  *            show two "/report outcome" lines and one DRY-RUN drop reply.
  *
- * The empty path (nothing pending → acknowledgment edit) is data-dependent;
- * it is covered by the live quickstart (T015). This driver covers it whenever
- * the dev data happens to have zero pending items (outcome tag "empty").
+ * The "nothing pending" case is data-dependent: `valid`/`suffix` deliver the
+ * full report with zero uncategorized items (spec change 2026-09-25: /report
+ * is always a full report, there is no ack-only "empty" outcome anymore).
  *
  * `valid`/`suffix`/`failure`/`queue` DO reach the real (dev) Actual stack and
  * write reports rows in the shared notifier.db — use only against the dev
@@ -134,14 +134,14 @@ async function main() {
     // handleUpdate never throws per-update (errors are logged inside).
     await handleUpdate(update);
 
-    // The real outcome ("sent" | "empty" | "failed") is emitted by the listener
+    // The real outcome ("sent" | "failed") is emitted by the listener
     // right after the pipeline: log('info', 'listener', '/report outcome', { outcome }).
     // For freetext/wrongchat there is NO outcome line at all — that silence IS
     // the expected result (no reply, no pipeline).
     console.log(
       scenario === 'freetext' || scenario === 'wrongchat'
         ? 'REPLAY-REPORT expected: no "/report outcome" log line (ignored, no reply)'
-        : 'REPLAY-REPORT look for: "listener /report outcome" with outcome tag (sent/empty/failed)',
+        : 'REPLAY-REPORT look for: "listener /report outcome" with outcome tag (sent/failed)',
     );
   } finally {
     store.close(db);
