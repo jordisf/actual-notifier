@@ -184,18 +184,19 @@ function createServer(db) {
   require('./routes/schedule').register(router, ctx);
   require('./routes/reveal').register(router, ctx);
 
-  // Panel stylesheet — served session-guarded (contracts/routes.md).
+  // Panel stylesheet — served WITHOUT a session gate (login-css-session-gate fix):
+  // the auth pages (/login, /set-password) only exist pre-session and link this
+  // asset, so gating it 302'd the <link> and rendered them unstyled. The CSS is
+  // cosmetic-only (no data) and the port is already bound via PANEL_BIND_HOST.
   const cssPath = path.join(__dirname, 'static', 'panel.css');
   router.get('/static/panel.css', (req, res) => {
-    requireSession(req, res, (req2, res2) => {
-      const css = fs.readFileSync(cssPath, 'utf8');
-      res2.writeHead(200, {
-        'Content-Type': 'text/css; charset=utf-8',
-        'Cache-Control': 'no-store',
-        'Content-Length': Buffer.byteLength(css),
-      });
-      res2.end(css);
+    const css = fs.readFileSync(cssPath, 'utf8');
+    res.writeHead(200, {
+      'Content-Type': 'text/css; charset=utf-8',
+      'Cache-Control': 'no-store',
+      'Content-Length': Buffer.byteLength(css),
     });
+    res.end(css);
   });
 
   const server = http.createServer(async (req, res) => {

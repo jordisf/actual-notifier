@@ -22,7 +22,7 @@ Every item below holds today and MUST hold after the feature (SC-005, FR-004). T
 | Aspect | Value |
 |--------|-------|
 | Method/path | `GET /static/panel.css` |
-| Auth | `requireSession`-gated (session check first) → 302 `/login` when unauthenticated |
+| Auth | **public** (no session gate). Fix `login-css-session-gate` (2026-09-24): the auth pages (`/login`, `/set-password`) exist only pre-session and link this asset, so a `requireSession` gate 302'd the `<link>` and left them unstyled. The CSS is cosmetic-only (no data) and the port is already bound via `PANEL_BIND_HOST`. |
 | Success | `200`, `Content-Type: text/css; charset=utf-8`, `Cache-Control: no-store`, body = exact bytes of `src/panel/static/panel.css` |
 | Failure | file missing/corrupt → `500` plain text (same as any panel 500) |
 

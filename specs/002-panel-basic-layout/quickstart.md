@@ -28,12 +28,12 @@ docker compose run --rm --entrypoint="" config-panel node --check /app/src/panel
 
 **Expected**: no output, exit 0 for each.
 
-## Scenario 1 — CSS is served and gated (Contract 1)
+## Scenario 1 — CSS is served (Contract 1)
 
 1. Log in to the panel and open any page.
 2. **Expected** (DevTools → Network): `GET /static/panel.css` returns `200`, `Content-Type: text/css; charset=utf-8`, `Cache-Control: no-store`; the page is visibly styled.
 3. Open `http://127.0.0.1:8080/static/panel.css` in a **fresh browser profile without a session cookie**.
-4. **Expected**: a `302` to `/login` — the asset is not readable unauthenticated (no CSS leak).
+4. **Expected**: `200` with the stylesheet (public asset since fix `login-css-session-gate` — the pre-session auth pages link it, so gating it would leave `/login` and `/set-password` unstyled).
 5. **Expected (visual)**: the page renders styled content, not the old flat HTML (compare against a screenshot of the pre-change panel if you have one).
 
 ## Scenario 2 — All 6 authenticated pages share the shell + nav (FR-001, FR-005, FR-006, SC-001, SC-003)

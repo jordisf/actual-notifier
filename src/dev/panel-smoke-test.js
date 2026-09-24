@@ -113,6 +113,20 @@ async function main() {
   assert.strictEqual(r.headers.get('location'), '/login');
   console.log('OK: GET / without session redirects to /login');
 
+  // 13. login-css-session-gate regression: stylesheet must be public (no session),
+  //     because /login and /set-password link it while pre-session.
+  r = await fetch(`${base}/static/panel.css`, { redirect: 'manual' });
+  assert.strictEqual(r.status, 200, `panel.css should be public, got ${r.status}`);
+  assert.ok((r.headers.get('content-type') || '').includes('text/css'), 'panel.css content-type');
+  assert.strictEqual(r.headers.get('cache-control'), 'no-store', 'panel.css cache-control');
+  console.log('OK: GET /static/panel.css without session -> 200 text/css (public)');
+
+  // 14. Regression guard: /login document still links the stylesheet.
+  r = await fetch(`${base}/login`);
+  body = await r.text();
+  assert.ok(body.includes('/static/panel.css'), 'login page must link /static/panel.css');
+  console.log('OK: GET /login links /static/panel.css (styled pre-session)');
+
   console.log('ALL_PANEL_HTTP_TESTS_PASSED');
 }
 
