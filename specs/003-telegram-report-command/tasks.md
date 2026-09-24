@@ -64,7 +64,7 @@
 **Independent Test**: in the group, type `/` → menu shows `report` with a description; selecting it delivers the report (quickstart step 2).
 
 - [X] T012 [US2] Implement `ensureCommandMenu()` in `src/listener.js`: register exactly one command `{ command: 'report', description: 'Generar el reporte ahora' }` at boot and re-register whenever `reloadTelegramEnv()` detects a changed `TELEGRAM_BOT_TOKEN` (track `registeredToken`); failure is logged and never blocks the poll loop (research.md R6, contract §1)
-- [ ] T013 [US2] Verify in the live homelab: `docker compose up -d --force-recreate notifier-listener`, logs show setMyCommands OK, client menu shows `report`, selecting it triggers US1 flow (quickstart step 2 + contract §1)
+- [X] T013 [US2] Verify in the live homelab: `docker compose up -d --force-recreate notifier-listener`, logs show setMyCommands OK, client menu shows `report`, selecting it triggers US1 flow (quickstart step 2 + contract §1)
 
 ### Story 2 Checkpoint
 
@@ -79,7 +79,7 @@ the command is discoverable and works from the menu with zero syntax knowledge.
 **Independent Test**: categorize all pending txs, send `/report` → the progress message becomes the acknowledgment, no full report is sent (quickstart step 6).
 
 - [X] T014 [US3] Implement the empty-report path in `src/listener.js` (via the shared `runReport` result): when there is nothing to deliver, `editMessageText` the progress message to the brief acknowledgment and skip report sending; tag the log outcome `empty` (contract §4 step 2b, spec FR-007)
-- [ ] T015 [US3] Verify in the homelab the acknowledgment wording is unambiguous ("the report ran, nothing pending") and that with pending items present the full report is still sent instead (quickstart steps 4 + 6)
+- [X] T015 [US3] Verify in the homelab the acknowledgment wording is unambiguous ("the report ran, nothing pending") and that with pending items present the full report is still sent instead (quickstart steps 4 + 6)
 
 ---
 
@@ -87,9 +87,8 @@ the command is discoverable and works from the menu with zero syntax knowledge.
 
 - [X] T016 Create `src/dev/replay-report-cmd.js`: offline replay driver feeding synthetic `message` update objects into the exported handler (no `getUpdates`, no network) covering: valid bare command, `@suffix` form, free text (no reply), wrong chat id (no reply), empty path edit, failure edit, depth-1 queue behavior (quickstart step 10, plan: dev replay convention)
 - [X] T017 Run `node --check` on `src/listener.js`, `src/reporte.js`, `src/reporte-diario.js`, `src/telegram/bot.js`, `src/report.js`, `src/store.js` (quickstart step 1)
-- [ ] T018 Execute the full `specs/003-telegram-report-command/quickstart.md` validation pass 1-10 against the homelab, including the cron no-regression check (SC-004) and the 10-request stress with `docker logs notifier_listener` scan for busy errors or orphaned pending rows (SC-005)
-- [X] T019 Update `README.md` (or the Telegram section of the docs) with a one-line note: the group command `/report` exists; no panel/config surface changes (spec Assumptions: no configuration surface)
-- [ ] T020 Commit work units per phase with Conventional Commit messages on branch `003-telegram-report-command`; confirm `git status` clean apart from pre-existing unrelated changes
+- [X] T018 Execute the full `specs/003-telegram-report-command/quickstart.md` validation pass 1-10 against the homelab, including the cron no-regression check (SC-004) and the 10-request stress with `docker logs notifier_listener` scan for busy errors or orphaned pending rows (SC-005)
+- [X] T020 Commit work units per phase with Conventional Commit messages on branch `003-telegram-report-command`; confirm `git status` clean apart from pre-existing unrelated changes
 
 ---
 
